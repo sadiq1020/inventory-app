@@ -115,12 +115,14 @@ function HomePage() {
                                 className="input"
                             />
                         )}
-                        <input
-                            disabled
-                            value={formData.netProfit}
-                            placeholder="Net Profit"
-                            className="input bg-gray-100 text-gray-700"
-                        />
+                        <div className="flex flex-col">
+                            <label className="text-sm text-gray-600 mb-1">Net Profit</label>
+                            <input
+                                disabled
+                                value={formData.netProfit}
+                                className="input bg-gray-100 text-gray-700"
+                            />
+                        </div>
                     </div>
                 </div>
 
