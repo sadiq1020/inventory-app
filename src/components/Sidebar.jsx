@@ -1,8 +1,13 @@
 // src/components/Sidebar.jsx
 import { Home, Menu } from "lucide-react";
 import React from "react";
+import { Link } from 'react-router-dom';
+
+// import { useNavigate } from 'react-router-dom';
 
 function Sidebar() {
+
+  // const navigate = useNavigate();
   return (
     <div className="w-64 bg-gray-100 border-r flex flex-col p-4">
       <div className="flex items-center justify-between mb-6">
@@ -13,9 +18,10 @@ function Sidebar() {
         <button className="text-left p-2 hover:bg-gray-200 rounded">
           Stock
         </button>
-        <button className="text-left p-2 hover:bg-gray-200 rounded">
+        <Link to="/customers" className="p-2 hover:bg-gray-200 rounded block">
           Customer
-        </button>
+        </Link>
+
       </nav>
     </div>
   );

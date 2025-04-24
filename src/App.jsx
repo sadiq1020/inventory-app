@@ -1,10 +1,15 @@
+// src/App.jsx
 import React from 'react';
-import './App.css'
+import { Routes, Route } from 'react-router-dom';
 import HomePage from './components/HomePage';
+import CustomerList from './pages/CustomerList'; // or wherever your component lives
 
 function App() {
   return (
-    <HomePage />
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/customers" element={<CustomerList />} />
+    </Routes>
   );
 }
 
