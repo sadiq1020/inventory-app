@@ -1,19 +1,31 @@
-// src/pages/CustomerList.jsx
-
-import React from 'react';
-import Sidebar from '../components/Sidebar';
-import Header from '../components/Header';
+// src/pages/CustomerPage.jsx
+import React from "react";
+import Sidebar from "../components/Sidebar";
+import PageHeader from "../components/PageHeader";
+// import CustomerTable from "../components/CustomerTable";
 
 function CustomerList() {
+
+    const handleRetailClick = () => {
+        console.log("Retail clicked (CustomerPage)");
+    };
+
+    const handleWholesaleClick = () => {
+        console.log("Wholesale clicked (CustomerPage)");
+    };
+
     return (
         <div className="flex h-screen">
             {/* Sidebar */}
             <Sidebar />
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col">
-                {/* Top Header (Tabs + Logout) */}
-                <Header />
+            <div className="flex-1 p-6 overflow-auto">
+                <PageHeader
+                    title="Customers List"
+                    onRetailClick={handleRetailClick}
+                    onWholesaleClick={handleWholesaleClick}
+                />
 
                 {/* Main Section */}
                 <main className="p-6 flex flex-col gap-6">
