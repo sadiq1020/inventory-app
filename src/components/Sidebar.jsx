@@ -15,9 +15,9 @@ function Sidebar() {
         <Link to="/"><Home className="w-6 h-6" /></Link>
       </div>
       <nav className="flex flex-col gap-4">
-        <button className="text-left p-2 hover:bg-gray-200 rounded">
+        <Link to="/stock" className="text-left p-2 hover:bg-gray-200 rounded">
           Stock
-        </button>
+        </Link>
         <Link to="/customers" className="p-2 hover:bg-gray-200 rounded block">
           Customer
         </Link>
