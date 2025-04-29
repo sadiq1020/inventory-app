@@ -1,17 +1,22 @@
-// src/components/TransactionActions.jsx
 import React from "react";
+import { PlusCircle, Edit, Trash } from "lucide-react";
 
 function TransactionActions() {
   return (
-    <div className="flex justify-center gap-6 mt-6">
-      <button className="px-6 py-2 border rounded bg-blue-500 text-white hover:bg-blue-600">
-        Add Transaction
+    <div className="mt-10 flex flex-wrap justify-center gap-4">
+      <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md shadow-md hover:bg-blue-700 transition-colors">
+        <PlusCircle size={18} className="mr-2" />
+        <span>Add Transaction</span>
       </button>
-      <button className="px-6 py-2 border rounded bg-yellow-500 text-white hover:bg-yellow-600">
-        Modify Transaction
+
+      <button className="flex items-center px-4 py-2 bg-amber-500 text-white rounded-md shadow-md hover:bg-amber-600 transition-colors">
+        <Edit size={18} className="mr-2" />
+        <span>Modify Transaction</span>
       </button>
-      <button className="px-6 py-2 border rounded bg-red-500 text-white hover:bg-red-600">
-        Delete Transaction
+
+      <button className="flex items-center px-4 py-2 bg-red-500 text-white rounded-md shadow-md hover:bg-red-600 transition-colors">
+        <Trash size={18} className="mr-2" />
+        <span>Delete Transaction</span>
       </button>
     </div>
   );

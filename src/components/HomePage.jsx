@@ -3,9 +3,10 @@ import Sidebar from "../components/Sidebar";
 import PageHeader from "../components/PageHeader";
 import TransactionTable from "../components/TransactionTable";
 import TransactionActions from "../components/TransactionActions";
+import { Search } from "lucide-react";
 
 function HomePage() {
-  const [searchBy, setSearchBy] = useState("name"); // Default "Search by Name"
+  const [searchBy, setSearchBy] = useState("name");
   const [searchInput, setSearchInput] = useState("");
 
   const handleRetailClick = () => {
@@ -36,10 +37,10 @@ function HomePage() {
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-gray-50">
       <Sidebar />
 
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 overflow-auto">
         <PageHeader
           title="Transaction History"
           onRetailClick={handleRetailClick}
@@ -47,35 +48,39 @@ function HomePage() {
         />
 
         {/* Main Content */}
-        <main className="p-6 flex flex-col gap-6">
-
+        <main className="p-6 max-w-7xl mx-auto">
           {/* Search Section */}
-          <div className="flex justify-center items-center">
-            <div className="flex border border-black rounded overflow-hidden w-1/2">
+          <div className="mb-8">
+            <div className="flex items-center max-w-lg mx-auto bg-white shadow-md rounded-lg overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-400">
               <select
                 value={searchBy}
                 onChange={(e) => setSearchBy(e.target.value)}
-                className="p-2 bg-white text-gray-700 focus:outline-none border-r border-black"
+                className="px-4 py-3 text-gray-700 focus:outline-none border-r bg-gray-50"
               >
-                <option value="name">Search by Name</option>
-                <option value="mobile">Search by Mobile Number</option>
-                <option value="customerId">Search by Customer ID</option>
+                <option value="name">Name</option>
+                <option value="mobile">Mobile</option>
+                <option value="customerId">Customer ID</option>
               </select>
 
               <input
                 type="text"
-                placeholder="Search..."
+                placeholder="Search transactions..."
                 value={searchInput}
                 onChange={handleSearchInputChange}
-                className="flex-1 p-2 focus:outline-none"
+                className="flex-1 px-4 py-3 focus:outline-none"
               />
+
+              <button className="px-4 py-3 bg-white text-gray-500 hover:text-blue-600">
+                <Search size={20} />
+              </button>
             </div>
           </div>
 
-
           {/* Transaction Table */}
-          <h2 className="text-center text-2xl font-semibold">Transaction History</h2>
-          <TransactionTable />
+          <div className="space-y-6">
+            <h2 className="text-2xl font-semibold text-gray-800">Transaction History</h2>
+            <TransactionTable />
+          </div>
 
           {/* Actions */}
           <TransactionActions />
