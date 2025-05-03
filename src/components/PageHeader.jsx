@@ -6,6 +6,8 @@ import { Link } from "react-router-dom";
 function PageHeader({ title, onRetailClick, onWholesaleClick }) {
     const auth = useAuth();
 
+    console.log(auth);
+
     // Get user information from the auth context
     const getUserInfo = () => {
         if (!auth.user) return null;
