@@ -1,34 +1,47 @@
 // src/components/AddCustomerModal.jsx
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 import React, { Fragment, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { Transition, TransitionChild } from "@headlessui/react";
 import { X, User, MapPin, Mail, Phone, Users, Check } from "lucide-react";
+import { useAuth } from "react-oidc-context";
+import {
+    DynamoDBClient,
+    PutItemCommand,
+} from "@aws-sdk/client-dynamodb";
+import {
+    fromCognitoIdentityPool,
+} from "@aws-sdk/credential-provider-cognito-identity";
+
+const REGION = "us-east-1";
+const IDENTITY_POOL_ID = "us-east-1:e6bcc9cf-e0f5-4d5a-a530-1766da1767f9";
+const TABLE_NAME = "Customer_Information";
 
 function AddCustomerModal({ isOpen, onClose }) {
+    const auth = useAuth();
     const [formState, setFormState] = useState({
-        name: '',
-        address: '',
-        customerType: '',
-        email: '',
-        phoneNumber: ''
+        name: "",
+        address: "",
+        customerType: "",
+        email: "",
+        phoneNumber: "",
     });
-
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const [formErrors, setFormErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const validateField = (name, value) => {
         switch (name) {
-            case 'name':
-                return value ? null : 'Name is required';
-            case 'phoneNumber':
-                return value ? null : 'Phone number is required';
-            case 'customerType':
-                return value ? null : 'Customer type is required';
-            case 'email':
-                if (!value) return null; // Email is optional
-                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ?
-                    null : 'Please enter a valid email';
+            case "name":
+                return value ? null : "Name is required";
+            case "phoneNumber":
+                return value ? null : "Phone number is required";
+            case "customerType":
+                return value ? null : "Customer type is required";
+            case "email":
+                if (!value) return null;
+                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+                    ? null
+                    : "Please enter a valid email";
             default:
                 return null;
         }
@@ -36,30 +49,20 @@ function AddCustomerModal({ isOpen, onClose }) {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormState({
-            ...formState,
-            [name]: value
-        });
-
-        // Clear error when user types
+        setFormState({ ...formState, [name]: value });
         if (formErrors[name]) {
-            setFormErrors({
-                ...formErrors,
-                [name]: null
-            });
+            setFormErrors({ ...formErrors, [name]: null });
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Validate all fields
         const errors = {};
-        Object.keys(formState).forEach(key => {
+        Object.keys(formState).forEach((key) => {
             const error = validateField(key, formState[key]);
             if (error) errors[key] = error;
         });
-
         if (Object.keys(errors).length > 0) {
             setFormErrors(errors);
             return;
@@ -68,42 +71,79 @@ function AddCustomerModal({ isOpen, onClose }) {
         setIsSubmitting(true);
 
         try {
-            const newCustomer = {
-                CustomerID: uuidv4(),
-                Name: formState.name,
-                Address: formState.address,
-                CustomerType: formState.customerType,
-                Email: formState.email,
-                PhoneNumber: formState.phoneNumber,
-            };
-
-            console.log('Customer to save:', newCustomer);
-
-            // Later here you will add AWS DynamoDB code like:
-            // await saveCustomerToDynamoDB(newCustomer);
-
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 800));
-
-            // After successful save
-            setIsSubmitting(false);
-            setFormState({
-                name: '',
-                address: '',
-                customerType: '',
-                email: '',
-                phoneNumber: ''
+            const credentials = fromCognitoIdentityPool({
+                identityPoolId: IDENTITY_POOL_ID,
+                logins: {
+                    "cognito-idp.us-east-1.amazonaws.com/us-east-1_szDQpWkvh":
+                        auth.user?.id_token || auth.user?.access_token,
+                },
+                clientConfig: { region: REGION },
             });
 
-            // Success message
-            alert('Customer Added Successfully!');
-            onClose(); // Close modal
+            const client = new DynamoDBClient({
+                region: REGION,
+                credentials,
+            });
+
+            const newCustomer = {
+                CustomerID: { S: uuidv4() },
+                Name: { S: formState.name },
+                Address: { S: formState.address || "-" },
+                CustomerType: { S: formState.customerType },
+                Email: { S: formState.email || "-" },
+                PhoneNumber: { S: formState.phoneNumber },
+            };
+
+            await client.send(
+                new PutItemCommand({
+                    TableName: TABLE_NAME,
+                    Item: newCustomer,
+                })
+            );
+
+            alert("Customer added successfully!");
+            setFormState({
+                name: "",
+                address: "",
+                customerType: "",
+                email: "",
+                phoneNumber: "",
+            });
+            setFormErrors({});
+            onClose();
         } catch (error) {
-            console.error('Error saving customer:', error);
+            console.error("Error saving customer:", error);
+            alert("Failed to save customer. Please try again.");
+        } finally {
             setIsSubmitting(false);
-            alert('Error saving customer. Please try again.');
         }
     };
+
+    const renderInput = (icon, type, name, label, isRequired) => (
+        <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+                {label} {isRequired && <span className="text-red-500">*</span>}
+            </label>
+            <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    {icon}
+                </div>
+                <input
+                    type={type}
+                    name={name}
+                    value={formState[name]}
+                    onChange={handleChange}
+                    placeholder={label}
+                    required={isRequired}
+                    className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${formErrors[name] ? "border-red-300 bg-red-50" : "border-gray-300"
+                        }`}
+                />
+            </div>
+            {formErrors[name] && (
+                <p className="mt-1 text-sm text-red-600">{formErrors[name]}</p>
+            )}
+        </div>
+    );
 
     return (
         <Transition show={isOpen} as={Fragment}>
@@ -117,7 +157,7 @@ function AddCustomerModal({ isOpen, onClose }) {
                     leaveFrom="opacity-100"
                     leaveTo="opacity-0"
                 >
-                    <div className="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm transition-opacity" />
+                    <div className="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm" />
                 </TransitionChild>
 
                 <div className="fixed inset-0 overflow-y-auto">
@@ -138,55 +178,15 @@ function AddCustomerModal({ isOpen, onClose }) {
                                     </DialogTitle>
                                     <button
                                         onClick={onClose}
-                                        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                        className="p-1 rounded-full hover:bg-gray-100"
                                     >
                                         <X size={18} />
                                     </button>
                                 </div>
 
                                 <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Name <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                <User size={16} className="text-gray-400" />
-                                            </div>
-                                            <input
-                                                type="text"
-                                                name="name"
-                                                value={formState.name}
-                                                onChange={handleChange}
-                                                placeholder="Customer name"
-                                                required
-                                                className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${formErrors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
-                                            />
-                                        </div>
-                                        {formErrors.name && (
-                                            <p className="mt-1 text-sm text-red-600">{formErrors.name}</p>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Address
-                                        </label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                <MapPin size={16} className="text-gray-400" />
-                                            </div>
-                                            <input
-                                                type="text"
-                                                name="address"
-                                                value={formState.address}
-                                                onChange={handleChange}
-                                                placeholder="Street address"
-                                                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                                            />
-                                        </div>
-                                    </div>
-
+                                    {renderInput(<User size={16} />, "text", "name", "Name", true)}
+                                    {renderInput(<MapPin size={16} />, "text", "address", "Address", false)}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Customer Type <span className="text-red-500">*</span>
@@ -200,7 +200,10 @@ function AddCustomerModal({ isOpen, onClose }) {
                                                 value={formState.customerType}
                                                 onChange={handleChange}
                                                 required
-                                                className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition appearance-none bg-none ${formErrors.customerType ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                                                className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none transition ${formErrors.customerType
+                                                    ? "border-red-300 bg-red-50"
+                                                    : "border-gray-300"
+                                                    }`}
                                             >
                                                 <option value="">Select Customer Type</option>
                                                 <option value="Retail">Retail</option>
@@ -211,51 +214,8 @@ function AddCustomerModal({ isOpen, onClose }) {
                                             <p className="mt-1 text-sm text-red-600">{formErrors.customerType}</p>
                                         )}
                                     </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Email
-                                        </label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                <Mail size={16} className="text-gray-400" />
-                                            </div>
-                                            <input
-                                                type="email"
-                                                name="email"
-                                                value={formState.email}
-                                                onChange={handleChange}
-                                                placeholder="email@example.com"
-                                                className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${formErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
-                                            />
-                                        </div>
-                                        {formErrors.email && (
-                                            <p className="mt-1 text-sm text-red-600">{formErrors.email}</p>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Phone Number <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                <Phone size={16} className="text-gray-400" />
-                                            </div>
-                                            <input
-                                                type="text"
-                                                name="phoneNumber"
-                                                value={formState.phoneNumber}
-                                                onChange={handleChange}
-                                                placeholder="Phone number"
-                                                required
-                                                className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${formErrors.phoneNumber ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
-                                            />
-                                        </div>
-                                        {formErrors.phoneNumber && (
-                                            <p className="mt-1 text-sm text-red-600">{formErrors.phoneNumber}</p>
-                                        )}
-                                    </div>
+                                    {renderInput(<Mail size={16} />, "email", "email", "Email", false)}
+                                    {renderInput(<Phone size={16} />, "text", "phoneNumber", "Phone Number", true)}
 
                                     <div className="flex items-center mt-2">
                                         <button
@@ -265,9 +225,25 @@ function AddCustomerModal({ isOpen, onClose }) {
                                         >
                                             {isSubmitting ? (
                                                 <span className="flex items-center">
-                                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    <svg
+                                                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <circle
+                                                            className="opacity-25"
+                                                            cx="12"
+                                                            cy="12"
+                                                            r="10"
+                                                            stroke="currentColor"
+                                                            strokeWidth="4"
+                                                        ></circle>
+                                                        <path
+                                                            className="opacity-75"
+                                                            fill="currentColor"
+                                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                        ></path>
                                                     </svg>
                                                     Processing...
                                                 </span>

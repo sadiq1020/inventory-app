@@ -30,22 +30,24 @@ import { useAuth } from "react-oidc-context";
 function TransactionActions() {
   const auth = useAuth();
 
-  const userGroups = auth.user?.profile?.["cognito:groups"] || [];
-
+  // Only get user groups if the user is authenticated
+  const isAuthenticated = auth.isAuthenticated;
+  const userGroups = isAuthenticated ? (auth.user?.profile?.["cognito:groups"] || []) : [];
   const isAdmin = userGroups.includes("Admin");
+
+  // Only render admin buttons if user is authenticated AND is an admin
+  if (!isAuthenticated || !isAdmin) {
+    return null; // Don't render anything if not authenticated or not admin
+  }
 
   return (
     <div className="flex justify-center gap-4 mt-4">
-      {isAdmin && (
-        <>
-          <button className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600">
-            Modify Transaction
-          </button>
-          <button className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
-            Delete Transaction
-          </button>
-        </>
-      )}
+      <button className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600">
+        Modify Transaction
+      </button>
+      <button className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+        Delete Transaction
+      </button>
     </div>
   );
 }

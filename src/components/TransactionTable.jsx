@@ -1,10 +1,12 @@
 // src/components/TransactionTable.jsx
-import React from "react";
+import React, { useState } from "react";
 import { Clipboard, PlusCircle } from "lucide-react";
 import { useAuth } from "react-oidc-context";
+import AddTransactionModal from "./AddTransactionModal"; // ✅ Import the modal
 
 function TransactionTable() {
   const auth = useAuth();
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const dummyTransactions = []; // Placeholder
 
@@ -12,7 +14,7 @@ function TransactionTable() {
     if (!auth.isAuthenticated) {
       auth.signinRedirect(); // Redirect to Cognito login
     } else {
-      console.log("Open modal or route to transaction form");
+      setIsModalOpen(true); // ✅ Open the modal
     }
   };
 
@@ -20,7 +22,7 @@ function TransactionTable() {
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       {dummyTransactions.length > 0 ? (
         <div className="overflow-x-auto">
-          {/* Your table implementation here */}
+          {/* You can place the real transaction table here */}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center text-center p-12">
@@ -43,6 +45,9 @@ function TransactionTable() {
           </div>
         </div>
       )}
+
+      {/* ✅ Modal Integration */}
+      <AddTransactionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </div>
   );
 }
