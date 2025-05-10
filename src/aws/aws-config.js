@@ -4,15 +4,15 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { useAuth } from "react-oidc-context";
 
 const REGION = "us-east-1";
-const IDENTITY_POOL_ID = "us-east-1:e6bc9cf-e0f5-4d5a-a530-1766da1767f9";
-const USER_POOL_ID = "us-east-1_szDQpWkvh";
+const IDENTITY_POOL_ID = "us-east-1:e6bcc9cf-e0f5-4d5a-a530-1766da1767f9";
+const USER_POOL_ID = "us-east-1_szDQpWkvh";  // <-- This must match your actual User Pool ID
 
 export function createDynamoDBClient(idToken) {
     const credentials = fromCognitoIdentityPool({
         identityPoolId: IDENTITY_POOL_ID,
         clientConfig: { region: REGION },
         logins: {
-            [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: idToken,
+            [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: idToken,  // ✅ FIXED format
         },
     });
 
