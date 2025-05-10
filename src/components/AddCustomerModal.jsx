@@ -1,6 +1,6 @@
 // src/components/AddCustomerModal.jsx
 import { v4 as uuidv4 } from "uuid";
-import React, { Fragment, useState } from "react";
+import React, { Fragment, useState, useEffect } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { Transition, TransitionChild } from "@headlessui/react";
 import { X, User, MapPin, Mail, Phone, Users, Check } from "lucide-react";
@@ -17,7 +17,7 @@ const REGION = "us-east-1";
 const IDENTITY_POOL_ID = "us-east-1:e6bcc9cf-e0f5-4d5a-a530-1766da1767f9";
 const TABLE_NAME = "Customer_Information";
 
-function AddCustomerModal({ isOpen, onClose }) {
+function AddCustomerModal({ isOpen, onClose, editingCustomer, refreshCustomers }) {
     const auth = useAuth();
     const [formState, setFormState] = useState({
         name: "",
@@ -28,6 +28,30 @@ function AddCustomerModal({ isOpen, onClose }) {
     });
     const [formErrors, setFormErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Populate form when editing an existing customer
+    useEffect(() => {
+        if (editingCustomer) {
+            setFormState({
+                name: editingCustomer.Name || "",
+                address: editingCustomer.Address || "",
+                customerType: editingCustomer.CustomerType || "",
+                email: editingCustomer.Email || "",
+                phoneNumber: editingCustomer.PhoneNumber || "",
+            });
+        } else {
+            // Reset form when adding a new customer
+            setFormState({
+                name: "",
+                address: "",
+                customerType: "",
+                email: "",
+                phoneNumber: "",
+            });
+        }
+        // Clear any previous errors
+        setFormErrors({});
+    }, [editingCustomer, isOpen]);
 
     const validateField = (name, value) => {
         switch (name) {
@@ -85,8 +109,8 @@ function AddCustomerModal({ isOpen, onClose }) {
                 credentials,
             });
 
-            const newCustomer = {
-                CustomerID: { S: uuidv4() },
+            const customerData = {
+                CustomerID: { S: editingCustomer ? editingCustomer.CustomerID : uuidv4() },
                 Name: { S: formState.name },
                 Address: { S: formState.address || "-" },
                 CustomerType: { S: formState.customerType },
@@ -97,23 +121,21 @@ function AddCustomerModal({ isOpen, onClose }) {
             await client.send(
                 new PutItemCommand({
                     TableName: TABLE_NAME,
-                    Item: newCustomer,
+                    Item: customerData,
                 })
             );
 
-            alert("Customer added successfully!");
-            setFormState({
-                name: "",
-                address: "",
-                customerType: "",
-                email: "",
-                phoneNumber: "",
-            });
-            setFormErrors({});
+            alert(editingCustomer ? "Customer updated successfully!" : "Customer added successfully!");
+
+            // Refresh the customer list
+            if (refreshCustomers) {
+                refreshCustomers();
+            }
+
             onClose();
         } catch (error) {
-            console.error("Error saving customer:", error);
-            alert("Failed to save customer. Please try again.");
+            console.error(`Error ${editingCustomer ? "updating" : "saving"} customer:`, error);
+            alert(`Failed to ${editingCustomer ? "update" : "save"} customer. Please try again.`);
         } finally {
             setIsSubmitting(false);
         }
@@ -174,7 +196,7 @@ function AddCustomerModal({ isOpen, onClose }) {
                             <DialogPanel className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md">
                                 <div className="flex items-center justify-between mb-4">
                                     <DialogTitle className="text-xl font-semibold text-gray-800">
-                                        Add New Customer
+                                        {editingCustomer ? "Edit Customer" : "Add New Customer"}
                                     </DialogTitle>
                                     <button
                                         onClick={onClose}
@@ -185,8 +207,8 @@ function AddCustomerModal({ isOpen, onClose }) {
                                 </div>
 
                                 <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-                                    {renderInput(<User size={16} />, "text", "name", "Name", true)}
-                                    {renderInput(<MapPin size={16} />, "text", "address", "Address", false)}
+                                    {renderInput(<User size={16} className="text-gray-400" />, "text", "name", "Name", true)}
+                                    {renderInput(<MapPin size={16} className="text-gray-400" />, "text", "address", "Address", false)}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Customer Type <span className="text-red-500">*</span>
@@ -214,8 +236,8 @@ function AddCustomerModal({ isOpen, onClose }) {
                                             <p className="mt-1 text-sm text-red-600">{formErrors.customerType}</p>
                                         )}
                                     </div>
-                                    {renderInput(<Mail size={16} />, "email", "email", "Email", false)}
-                                    {renderInput(<Phone size={16} />, "text", "phoneNumber", "Phone Number", true)}
+                                    {renderInput(<Mail size={16} className="text-gray-400" />, "email", "email", "Email", false)}
+                                    {renderInput(<Phone size={16} className="text-gray-400" />, "text", "phoneNumber", "Phone Number", true)}
 
                                     <div className="flex items-center mt-2">
                                         <button
@@ -250,7 +272,7 @@ function AddCustomerModal({ isOpen, onClose }) {
                                             ) : (
                                                 <span className="flex items-center">
                                                     <Check size={18} className="mr-2" />
-                                                    Submit
+                                                    {editingCustomer ? "Update" : "Submit"}
                                                 </span>
                                             )}
                                         </button>

@@ -3,11 +3,11 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import PageHeader from "../components/PageHeader";
 import AddCustomerModal from "../components/AddCustomerModal";
-import { User, Mail, Phone, Filter, Search, Edit, Trash, UserPlus } from "lucide-react";
-import { useAuth } from "react-oidc-context";
+import { UserPlus, Pencil, Trash2, Filter, Search } from "lucide-react";
 import { createDynamoDBClient } from "../aws/aws-config";
-import { ScanCommand } from "@aws-sdk/client-dynamodb";
+import { ScanCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
+import { useAuth } from "react-oidc-context";
 
 function CustomerList() {
     const auth = useAuth();
@@ -15,9 +15,13 @@ function CustomerList() {
     const [customers, setCustomers] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [activeFilter, setActiveFilter] = useState("all");
+    const [editingCustomer, setEditingCustomer] = useState(null);
 
     const openModal = () => setIsModalOpen(true);
-    const closeModal = () => setIsModalOpen(false);
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setEditingCustomer(null);
+    };
 
     const handleRetailClick = () => setActiveFilter("retail");
     const handleWholesaleClick = () => setActiveFilter("wholesale");
@@ -28,32 +32,53 @@ function CustomerList() {
             const idToken = auth.user?.id_token || auth.user?.access_token;
             const dynamoClient = createDynamoDBClient(idToken);
 
-            const command = new ScanCommand({
-                TableName: "Customer_Information"
-            });
-
+            const command = new ScanCommand({ TableName: "Customer_Information" });
             const response = await dynamoClient.send(command);
-            const items = response.Items.map(item => unmarshall(item));
+            const items = response.Items.map((item) => unmarshall(item));
             setCustomers(items);
         } catch (error) {
             console.error("Error fetching customers:", error);
         }
     };
 
+    const handleDelete = async (customer) => {
+        const confirmed = window.confirm(
+            `Are you sure you want to delete customer "${customer.Name}"?`
+        );
+        if (!confirmed) return;
+
+        try {
+            const idToken = auth.user?.id_token || auth.user?.access_token;
+            const dynamoClient = createDynamoDBClient(idToken);
+            const deleteCmd = new DeleteItemCommand({
+                TableName: "Customer_Information",
+                Key: { CustomerID: { S: customer.CustomerID } },
+            });
+            await dynamoClient.send(deleteCmd);
+            fetchCustomers();
+        } catch (error) {
+            console.error("Delete error:", error);
+        }
+    };
+
+    const handleEdit = (customer) => {
+        setEditingCustomer(customer);
+        setIsModalOpen(true);
+    };
+
     useEffect(() => {
-        fetchCustomers();
+        if (auth.user) fetchCustomers();
     }, [auth.user]);
 
-    const filteredCustomers = customers.filter((customer) => {
+    const filteredCustomers = customers.filter((c) => {
         const matchesType =
             activeFilter === "all" ||
-            (activeFilter === "retail" && customer.CustomerType === "Retail") ||
-            (activeFilter === "wholesale" && customer.CustomerType === "Wholesale");
+            (activeFilter === "retail" && c.CustomerType === "Retail") ||
+            (activeFilter === "wholesale" && c.CustomerType === "Wholesale");
 
         const matchesSearch =
-            customer.Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            customer.Email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            customer.PhoneNumber?.includes(searchQuery);
+            c.Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.PhoneNumber?.includes(searchQuery);
 
         return matchesType && matchesSearch;
     });
@@ -74,24 +99,35 @@ function CustomerList() {
                     <div className="mb-6 bg-white p-4 rounded-lg shadow-sm">
                         <div className="flex flex-col md:flex-row justify-between gap-4">
                             <div className="flex items-center space-x-2">
-                                <h2 className="text-lg font-medium text-gray-700">Customer Database</h2>
+                                <h2 className="text-lg font-medium text-gray-700">
+                                    Customer Database
+                                </h2>
                                 <div className="flex items-center bg-gray-100 rounded-lg p-1">
                                     <button
                                         onClick={handleResetFilter}
-                                        className={`px-3 py-1.5 text-sm rounded-md ${activeFilter === "all" ? "bg-white text-blue-600 shadow-sm" : "text-gray-600 hover:bg-gray-200"}`}
+                                        className={`px-3 py-1.5 text-sm rounded-md ${activeFilter === "all"
+                                                ? "bg-white text-blue-600 shadow-sm"
+                                                : "text-gray-600 hover:bg-gray-200"
+                                            }`}
                                     >
                                         All
                                     </button>
                                     <button
                                         onClick={handleRetailClick}
-                                        className={`flex items-center px-3 py-1.5 text-sm rounded-md ${activeFilter === "retail" ? "bg-white text-blue-600 shadow-sm" : "text-gray-600 hover:bg-gray-200"}`}
+                                        className={`flex items-center px-3 py-1.5 text-sm rounded-md ${activeFilter === "retail"
+                                                ? "bg-white text-blue-600 shadow-sm"
+                                                : "text-gray-600 hover:bg-gray-200"
+                                            }`}
                                     >
                                         <Filter size={14} className="mr-1" />
                                         Retail
                                     </button>
                                     <button
                                         onClick={handleWholesaleClick}
-                                        className={`flex items-center px-3 py-1.5 text-sm rounded-md ${activeFilter === "wholesale" ? "bg-white text-blue-600 shadow-sm" : "text-gray-600 hover:bg-gray-200"}`}
+                                        className={`flex items-center px-3 py-1.5 text-sm rounded-md ${activeFilter === "wholesale"
+                                                ? "bg-white text-blue-600 shadow-sm"
+                                                : "text-gray-600 hover:bg-gray-200"
+                                            }`}
                                     >
                                         <Filter size={14} className="mr-1" />
                                         Wholesale
@@ -119,38 +155,57 @@ function CustomerList() {
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Address</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Name
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Type
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Email
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Phone
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Address
+                                    </th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                                        Actions
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredCustomers.length > 0 ? (
-                                    filteredCustomers.map((cust) => (
-                                        <tr key={cust.CustomerID}>
-                                            <td className="px-6 py-4">{cust.Name}</td>
-                                            <td className="px-6 py-4">{cust.CustomerType}</td>
-                                            <td className="px-6 py-4">{cust.Email || "—"}</td>
-                                            <td className="px-6 py-4">{cust.PhoneNumber}</td>
-                                            <td className="px-6 py-4">{cust.Address || "—"}</td>
-                                            <td className="px-6 py-4">
-                                                {/* Future: Edit/Delete buttons */}
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan="6" className="px-6 py-12 text-center text-gray-500">No customers found</td>
+                                {filteredCustomers.map((cust) => (
+                                    <tr key={cust.CustomerID}>
+                                        <td className="px-6 py-4">{cust.Name}</td>
+                                        <td className="px-6 py-4">{cust.CustomerType}</td>
+                                        <td className="px-6 py-4">{cust.Email || "—"}</td>
+                                        <td className="px-6 py-4">{cust.PhoneNumber}</td>
+                                        <td className="px-6 py-4">{cust.Address || "—"}</td>
+                                        <td className="px-6 py-4 flex gap-3 justify-center">
+                                            <button
+                                                onClick={() => handleEdit(cust)}
+                                                className="text-blue-600 hover:text-blue-800"
+                                                title="Edit"
+                                            >
+                                                <Pencil size={16} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(cust)}
+                                                className="text-red-600 hover:text-red-800"
+                                                title="Delete"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </td>
                                     </tr>
-                                )}
+                                ))}
                             </tbody>
                         </table>
                     </div>
 
-                    {/* Add New Customer Button at Bottom */}
+                    {/* Add Button */}
                     <div className="mt-6 text-center">
                         <button
                             onClick={openModal}
@@ -161,7 +216,13 @@ function CustomerList() {
                         </button>
                     </div>
 
-                    <AddCustomerModal isOpen={isModalOpen} onClose={closeModal} />
+                    {/* Modal */}
+                    <AddCustomerModal
+                        isOpen={isModalOpen}
+                        onClose={closeModal}
+                        editingCustomer={editingCustomer}
+                        refreshCustomers={fetchCustomers}
+                    />
                 </main>
             </div>
         </div>
