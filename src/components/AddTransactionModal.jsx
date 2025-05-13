@@ -1,209 +1,33 @@
-// src/components/AddCustomerModal.jsx
-import { v4 as uuidv4 } from "uuid";
-import React, { Fragment, useState, useEffect } from "react";
+// src/components/AddTransactionModal.jsx
+import React, { Fragment, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { Transition, TransitionChild } from "@headlessui/react";
-import { X, User, MapPin, Mail, Phone, Users, Check } from "lucide-react";
-import { useAuth } from "react-oidc-context";
-import {
-    DynamoDBClient,
-    PutItemCommand,
-    UpdateItemCommand,
-} from "@aws-sdk/client-dynamodb";
-import {
-    fromCognitoIdentityPool,
-} from "@aws-sdk/credential-provider-cognito-identity";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
-const REGION = "us-east-1";
-const IDENTITY_POOL_ID = "us-east-1:e6bcc9cf-e0f5-4d5a-a530-1766da1767f9";
-const TABLE_NAME = "Customer_Information";
+const nonJudicialVariations = [
+    "100-90", "50-46", "40-35", "30-26", "25-21", "20-16", "10-8", "5-3"
+];
 
-function AddCustomerModal({ isOpen, onClose, editingCustomer, refreshCustomers }) {
-    const auth = useAuth();
-    const [formState, setFormState] = useState({
-        name: "",
-        address: "",
-        customerType: "",
-        email: "",
-        phoneNumber: "",
-    });
-    const [formErrors, setFormErrors] = useState({});
-    const [isSubmitting, setIsSubmitting] = useState(false);
+function AddTransactionModal({ isOpen, onClose }) {
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [productType, setProductType] = useState("Retail");
+    const [productCategory, setProductCategory] = useState("Non-judicial stamp");
 
-    // Effect to update form state when editingCustomer changes
-    useEffect(() => {
-        if (editingCustomer) {
-            setFormState({
-                name: editingCustomer.Name || "",
-                address: editingCustomer.Address || "",
-                customerType: editingCustomer.CustomerType || "",
-                email: editingCustomer.Email || "",
-                phoneNumber: editingCustomer.PhoneNumber || "",
-            });
-        } else {
-            // Reset form when not editing
-            setFormState({
-                name: "",
-                address: "",
-                customerType: "",
-                email: "",
-                phoneNumber: "",
-            });
-        }
-        setFormErrors({});
-    }, [editingCustomer, isOpen]);
-
-    const validateField = (name, value) => {
-        switch (name) {
-            case "name":
-                return value ? null : "Name is required";
-            case "phoneNumber":
-                return value ? null : "Phone number is required";
-            case "customerType":
-                return value ? null : "Customer type is required";
-            case "email":
-                if (!value) return null;
-                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-                    ? null
-                    : "Please enter a valid email";
-            default:
-                return null;
-        }
+    const handleProductTypeChange = (e) => {
+        setProductType(e.target.value);
     };
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormState({ ...formState, [name]: value });
-        if (formErrors[name]) {
-            setFormErrors({ ...formErrors, [name]: null });
-        }
+    const handleProductCategoryChange = (e) => {
+        setProductCategory(e.target.value);
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
-
-        const errors = {};
-        Object.keys(formState).forEach((key) => {
-            const error = validateField(key, formState[key]);
-            if (error) errors[key] = error;
-        });
-        if (Object.keys(errors).length > 0) {
-            setFormErrors(errors);
-            return;
-        }
-
-        setIsSubmitting(true);
-
-        try {
-            const credentials = fromCognitoIdentityPool({
-                identityPoolId: IDENTITY_POOL_ID,
-                logins: {
-                    "cognito-idp.us-east-1.amazonaws.com/us-east-1_szDQpWkvh":
-                        auth.user?.id_token || auth.user?.access_token,
-                },
-                clientConfig: { region: REGION },
-            });
-
-            const client = new DynamoDBClient({
-                region: REGION,
-                credentials,
-            });
-
-            if (editingCustomer) {
-                // Update existing customer
-                const updateCommand = new UpdateItemCommand({
-                    TableName: TABLE_NAME,
-                    Key: {
-                        CustomerID: { S: editingCustomer.CustomerID }
-                    },
-                    UpdateExpression: "SET #name = :name, #address = :address, #type = :type, #email = :email, #phone = :phone",
-                    ExpressionAttributeNames: {
-                        "#name": "Name",
-                        "#address": "Address",
-                        "#type": "CustomerType",
-                        "#email": "Email",
-                        "#phone": "PhoneNumber"
-                    },
-                    ExpressionAttributeValues: {
-                        ":name": { S: formState.name },
-                        ":address": { S: formState.address || "-" },
-                        ":type": { S: formState.customerType },
-                        ":email": { S: formState.email || "-" },
-                        ":phone": { S: formState.phoneNumber }
-                    }
-                });
-
-                await client.send(updateCommand);
-                alert("Customer updated successfully!");
-            } else {
-                // Add new customer
-                const newCustomer = {
-                    CustomerID: { S: uuidv4() },
-                    Name: { S: formState.name },
-                    Address: { S: formState.address || "-" },
-                    CustomerType: { S: formState.customerType },
-                    Email: { S: formState.email || "-" },
-                    PhoneNumber: { S: formState.phoneNumber },
-                };
-
-                await client.send(
-                    new PutItemCommand({
-                        TableName: TABLE_NAME,
-                        Item: newCustomer,
-                    })
-                );
-                alert("Customer added successfully!");
-            }
-
-            // Reset form state
-            setFormState({
-                name: "",
-                address: "",
-                customerType: "",
-                email: "",
-                phoneNumber: "",
-            });
-            setFormErrors({});
-
-            // Refresh customer list
-            if (refreshCustomers) {
-                refreshCustomers();
-            }
-
-            onClose();
-        } catch (error) {
-            console.error("Error saving customer:", error);
-            alert(`Failed to ${editingCustomer ? "update" : "save"} customer. Please try again.`);
-        } finally {
-            setIsSubmitting(false);
-        }
+        // Just logging for now. You'll integrate DynamoDB later.
+        console.log("Transaction Submitted");
+        onClose();
     };
-
-    const renderInput = (icon, type, name, label, isRequired) => (
-        <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-                {label} {isRequired && <span className="text-red-500">*</span>}
-            </label>
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    {icon}
-                </div>
-                <input
-                    type={type}
-                    name={name}
-                    value={formState[name]}
-                    onChange={handleChange}
-                    placeholder={label}
-                    required={isRequired}
-                    className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${formErrors[name] ? "border-red-300 bg-red-50" : "border-gray-300"
-                        }`}
-                />
-            </div>
-            {formErrors[name] && (
-                <p className="mt-1 text-sm text-red-600">{formErrors[name]}</p>
-            )}
-        </div>
-    );
 
     return (
         <Transition show={isOpen} as={Fragment}>
@@ -217,7 +41,7 @@ function AddCustomerModal({ isOpen, onClose, editingCustomer, refreshCustomers }
                     leaveFrom="opacity-100"
                     leaveTo="opacity-0"
                 >
-                    <div className="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm" />
+                    <div className="fixed inset-0 bg-black bg-opacity-30 transition-opacity" />
                 </TransitionChild>
 
                 <div className="fixed inset-0 overflow-y-auto">
@@ -231,90 +55,120 @@ function AddCustomerModal({ isOpen, onClose, editingCustomer, refreshCustomers }
                             leaveFrom="opacity-100 scale-100"
                             leaveTo="opacity-0 scale-95"
                         >
-                            <DialogPanel className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md">
-                                <div className="flex items-center justify-between mb-4">
-                                    <DialogTitle className="text-xl font-semibold text-gray-800">
-                                        {editingCustomer ? "Edit Customer" : "Add New Customer"}
-                                    </DialogTitle>
-                                    <button
-                                        onClick={onClose}
-                                        className="p-1 rounded-full hover:bg-gray-100"
-                                    >
-                                        <X size={18} />
-                                    </button>
-                                </div>
+                            <DialogPanel className="bg-white p-6 rounded-lg shadow-xl w-full max-w-xl">
+                                <DialogTitle className="text-xl font-semibold mb-4">
+                                    Add New Transaction
+                                </DialogTitle>
 
                                 <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-                                    {renderInput(<User size={16} className="text-gray-400" />, "text", "name", "Name", true)}
-                                    {renderInput(<MapPin size={16} className="text-gray-400" />, "text", "address", "Address", false)}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Customer Type <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                <Users size={16} className="text-gray-400" />
-                                            </div>
-                                            <select
-                                                name="customerType"
-                                                value={formState.customerType}
-                                                onChange={handleChange}
-                                                required
-                                                className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none transition ${formErrors.customerType
-                                                    ? "border-red-300 bg-red-50"
-                                                    : "border-gray-300"
-                                                    }`}
-                                            >
-                                                <option value="">Select Customer Type</option>
-                                                <option value="Retail">Retail</option>
-                                                <option value="Wholesale">Wholesale</option>
-                                            </select>
-                                        </div>
-                                        {formErrors.customerType && (
-                                            <p className="mt-1 text-sm text-red-600">{formErrors.customerType}</p>
-                                        )}
-                                    </div>
-                                    {renderInput(<Mail size={16} className="text-gray-400" />, "email", "email", "Email", false)}
-                                    {renderInput(<Phone size={16} className="text-gray-400" />, "text", "phoneNumber", "Phone Number", true)}
+                                    {/* Customer Name Dropdown (searchable later) */}
+                                    <input
+                                        type="text"
+                                        name="customerName"
+                                        placeholder="Customer Name (Dropdown later)"
+                                        className="border p-2 rounded"
+                                    />
 
-                                    <div className="flex items-center mt-2">
-                                        <button
-                                            type="submit"
-                                            disabled={isSubmitting}
-                                            className="w-full flex items-center justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition disabled:opacity-70 disabled:cursor-not-allowed"
-                                        >
-                                            {isSubmitting ? (
-                                                <span className="flex items-center">
-                                                    <svg
-                                                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                    >
-                                                        <circle
-                                                            className="opacity-25"
-                                                            cx="12"
-                                                            cy="12"
-                                                            r="10"
-                                                            stroke="currentColor"
-                                                            strokeWidth="4"
-                                                        ></circle>
-                                                        <path
-                                                            className="opacity-75"
-                                                            fill="currentColor"
-                                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                        ></path>
-                                                    </svg>
-                                                    Processing...
-                                                </span>
-                                            ) : (
-                                                <span className="flex items-center">
-                                                    <Check size={18} className="mr-2" />
-                                                    {editingCustomer ? "Update" : "Submit"}
-                                                </span>
-                                            )}
-                                        </button>
-                                    </div>
+                                    {/* Customer ID (autofilled later) */}
+                                    <input
+                                        type="text"
+                                        name="customerId"
+                                        placeholder="Customer ID (Auto)"
+                                        disabled
+                                        className="border p-2 rounded bg-gray-100 text-gray-700"
+                                    />
+
+                                    {/* Date Picker */}
+                                    <DatePicker
+                                        selected={selectedDate}
+                                        onChange={(date) => setSelectedDate(date)}
+                                        dateFormat="yyyy-MM-dd"
+                                        className="border p-2 rounded w-full"
+                                        placeholderText="Select date"
+                                    />
+
+                                    {/* Product Type */}
+                                    <select
+                                        name="productType"
+                                        value={productType}
+                                        onChange={handleProductTypeChange}
+                                        className="border p-2 rounded"
+                                    >
+                                        <option value="Retail">Retail</option>
+                                        <option value="Wholesale">Wholesale</option>
+                                    </select>
+
+                                    {/* Product Variation */}
+                                    <select
+                                        name="productCategory"
+                                        value={productCategory}
+                                        onChange={handleProductCategoryChange}
+                                        className="border p-2 rounded"
+                                    >
+                                        <option value="Non-judicial stamp">Non-judicial stamp</option>
+                                        <option value="Cartridge Paper">Cartridge Paper</option>
+                                        <option value="Folio paper">Folio paper</option>
+                                    </select>
+
+                                    {productCategory === "Non-judicial stamp" && (
+                                        <select name="productVariation" className="border p-2 rounded">
+                                            <option value="">Select Variation</option>
+                                            {nonJudicialVariations.map((v) => (
+                                                <option key={v} value={v}>
+                                                    {v}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+
+                                    {productCategory !== "Non-judicial stamp" && (
+                                        <input
+                                            name="productVariation"
+                                            placeholder="Variation (e.g. 10-6)"
+                                            className="border p-2 rounded"
+                                        />
+                                    )}
+
+                                    {/* Quantity */}
+                                    <input
+                                        type="number"
+                                        name={productType === "Retail" ? "Quantity_Pcs" : "Quantity_Packets"}
+                                        placeholder={productType === "Retail" ? "Quantity_Pcs" : "Quantity_Packets"}
+                                        className="border p-2 rounded"
+                                    />
+
+                                    {/* Selling Price */}
+                                    <input
+                                        type="number"
+                                        name="sellingPrice"
+                                        placeholder="Selling Price"
+                                        className="border p-2 rounded"
+                                    />
+
+                                    {/* COGS (auto-filled later) */}
+                                    <input
+                                        type="number"
+                                        name={productType === "Retail" ? "COGS_Pcs" : "COGS_Packets"}
+                                        placeholder={productType === "Retail" ? "COGS_Pcs" : "COGS_Packets"}
+                                        disabled
+                                        className="border p-2 rounded bg-gray-100 text-gray-700"
+                                    />
+
+                                    {/* Net Profit (auto-calculated later) */}
+                                    <input
+                                        type="number"
+                                        name="netProfit"
+                                        placeholder="Net Profit"
+                                        disabled
+                                        className="border p-2 rounded bg-gray-100 text-gray-700"
+                                    />
+
+                                    <button
+                                        type="submit"
+                                        className="mt-4 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded"
+                                    >
+                                        Submit
+                                    </button>
                                 </form>
                             </DialogPanel>
                         </TransitionChild>
@@ -325,4 +179,4 @@ function AddCustomerModal({ isOpen, onClose, editingCustomer, refreshCustomers }
     );
 }
 
-export default AddCustomerModal;
+export default AddTransactionModal;
