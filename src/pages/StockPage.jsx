@@ -58,6 +58,17 @@ function StockPage() {
   const currentStock = activeTab === "retail" ? retailStock : wholesaleStock;
   const currentTableName = activeTab === "retail" ? "Retail_Stock" : "Wholesale_Stock";
 
+  // Calculate total value for each item based on the stock type
+  const calculateTotalValue = (item) => {
+    if (activeTab === "retail") {
+      // For retail: Total Value = Unit Price × Quantity (pcs)
+      return item.unitPrice * item.quantity;
+    } else {
+      // For wholesale: Total Value = Unit Price × Quantity (packets) × 20
+      return item.unitPrice * item.quantity * 20;
+    }
+  };
+
   const handleSearch = (e) => setSearchQuery(e.target.value);
 
   const requestSort = (key) => {
@@ -139,12 +150,20 @@ function StockPage() {
 
   const handleExportData = () => {
     // Create CSV data from filteredAndSortedStock
-    const headers = ["Item Type", "Variation", activeTab === "retail" ? "Quantity (pcs)" : "Quantity (packets)", "Unit Price"];
+    const headers = [
+      "Item Type",
+      "Variation",
+      activeTab === "retail" ? "Quantity (pcs)" : "Quantity (packets)",
+      "Unit Price",
+      "Total Value"
+    ];
+
     const csvData = [
       headers.join(","),
-      ...filteredAndSortedStock.map(item =>
-        `"${item.itemType}","${item.variationName}",${item.quantity},${item.unitPrice ? item.unitPrice.toFixed(2) : "0.00"}`
-      )
+      ...filteredAndSortedStock.map(item => {
+        const totalValue = calculateTotalValue(item);
+        return `"${item.itemType}","${item.variationName}",${item.quantity},${item.unitPrice ? item.unitPrice.toFixed(2) : "0.00"},${totalValue.toFixed(2)}`;
+      })
     ].join("\n");
 
     // Create download link
@@ -294,59 +313,71 @@ function StockPage() {
                         </div>
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-700">
+                        <div className="flex items-center cursor-pointer" onClick={() => requestSort("totalValue")}>
+                          Total Value
+                          {sortConfig.key === "totalValue" && (
+                            <ArrowUpDown size={14} className="ml-1" />
+                          )}
+                        </div>
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-700">
                         Actions
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredAndSortedStock.length > 0 ? (
-                      filteredAndSortedStock.map((item) => (
-                        <tr key={item.id} className={item.quantity <= item.lowStockThreshold ? "bg-amber-50" : ""}>
-                          <td className="px-6 py-4">{item.itemType}</td>
-                          <td className="px-6 py-4">{item.variationName}</td>
-                          <td className="px-6 py-4">
-                            <span className={item.quantity <= item.lowStockThreshold ? "text-amber-700 font-medium" : ""}>
-                              {item.quantity}
-                            </span>
-                            {item.quantity <= item.lowStockThreshold && (
-                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                                <AlertCircle size={12} className="mr-1" />
-                                Low
+                      filteredAndSortedStock.map((item) => {
+                        const totalValue = calculateTotalValue(item);
+                        return (
+                          <tr key={item.id} className={item.quantity <= item.lowStockThreshold ? "bg-amber-50" : ""}>
+                            <td className="px-6 py-4">{item.itemType}</td>
+                            <td className="px-6 py-4">{item.variationName}</td>
+                            <td className="px-6 py-4">
+                              <span className={item.quantity <= item.lowStockThreshold ? "text-amber-700 font-medium" : ""}>
+                                {item.quantity}
                               </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">${item.unitPrice ? item.unitPrice.toFixed(2) : "0.00"}</td>
-                          <td className="px-6 py-4 relative">
-                            <button onClick={() => toggleActionsMenu(item.id)} className="text-gray-400 hover:text-gray-600">
-                              <MoreVertical size={16} />
-                            </button>
+                              {item.quantity <= item.lowStockThreshold && (
+                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                                  <AlertCircle size={12} className="mr-1" />
+                                  Low
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">${item.unitPrice ? item.unitPrice.toFixed(2) : "0.00"}</td>
+                            <td className="px-6 py-4">${totalValue.toFixed(2)}</td>
+                            <td className="px-6 py-4 relative">
+                              <button onClick={() => toggleActionsMenu(item.id)} className="text-gray-400 hover:text-gray-600">
+                                <MoreVertical size={16} />
+                              </button>
 
-                            {showActionsMenu === item.id && (
-                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
-                                <div className="py-1">
-                                  <button
-                                    onClick={() => handleEditItem(item)}
-                                    className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                  >
-                                    <Edit size={14} className="mr-2" />
-                                    Edit Item
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteItem(item)}
-                                    className="flex items-center w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                                  >
-                                    <Trash size={14} className="mr-2" />
-                                    Delete Item
-                                  </button>
+                              {showActionsMenu === item.id && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
+                                  <div className="py-1">
+                                    <button
+                                      onClick={() => handleEditItem(item)}
+                                      className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                      <Edit size={14} className="mr-2" />
+                                      Edit Item
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteItem(item)}
+                                      className="flex items-center w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                                    >
+                                      <Trash size={14} className="mr-2" />
+                                      Delete Item
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
-                        <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                        <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                           <Package size={48} className="mx-auto mb-4 text-gray-400" />
                           <p className="text-lg">No stock items found</p>
                           <p className="text-sm mt-1">

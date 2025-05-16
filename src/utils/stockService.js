@@ -12,15 +12,27 @@ export const fetchStock = async (tableName, token) => {
     const response = await client.send(command);
 
     const quantityField = tableName === "Retail_Stock" ? "Quantity_pcs" : "Quantity_packets";
+    const isRetail = tableName === "Retail_Stock";
 
-    const stock = response.Items?.map((item) => ({
-        id: `${item.ItemType?.S}-${item.VariationName?.S}`,
-        itemType: item.ItemType?.S || "",
-        variationName: item.VariationName?.S || "",
-        quantity: Number(item[quantityField]?.N || 0),
-        unitPrice: Number(item.UnitPrice?.N || 0),
-        lowStockThreshold: Number(item.LowStockThreshold?.N || 10),
-    })) || [];
+    const stock = response.Items?.map((item) => {
+        const quantity = Number(item[quantityField]?.N || 0);
+        const unitPrice = Number(item.UnitPrice?.N || 0);
+
+        // Calculate total value based on stock type
+        const totalValue = isRetail
+            ? unitPrice * quantity
+            : unitPrice * quantity * 20; // For wholesale: 1 packet = 20 pcs
+
+        return {
+            id: `${item.ItemType?.S}-${item.VariationName?.S}`,
+            itemType: item.ItemType?.S || "",
+            variationName: item.VariationName?.S || "",
+            quantity: quantity,
+            unitPrice: unitPrice,
+            totalValue: totalValue, // Add total value to each item
+            lowStockThreshold: Number(item.LowStockThreshold?.N || 10),
+        };
+    }) || [];
 
     return stock;
 };
@@ -57,12 +69,21 @@ export const getStockItem = async (tableName, itemType, variationName, token) =>
     }
 
     const quantityField = tableName === "Retail_Stock" ? "Quantity_pcs" : "Quantity_packets";
+    const quantity = Number(response.Item[quantityField]?.N || 0);
+    const unitPrice = Number(response.Item.UnitPrice?.N || 0);
+    const isRetail = tableName === "Retail_Stock";
+
+    // Calculate total value based on stock type
+    const totalValue = isRetail
+        ? unitPrice * quantity
+        : unitPrice * quantity * 20; // For wholesale: 1 packet = 20 pcs
 
     return {
         itemType: response.Item.ItemType?.S || "",
         variationName: response.Item.VariationName?.S || "",
-        quantity: Number(response.Item[quantityField]?.N || 0),
-        unitPrice: Number(response.Item.UnitPrice?.N || 0),
+        quantity: quantity,
+        unitPrice: unitPrice,
+        totalValue: totalValue,
         lowStockThreshold: Number(response.Item.LowStockThreshold?.N || 10),
     };
 };
