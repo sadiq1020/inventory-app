@@ -1,32 +1,231 @@
 // src/components/AddTransactionModal.jsx
-import React, { Fragment, useState } from "react";
+import React, { Fragment, useState, useEffect } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { Transition, TransitionChild } from "@headlessui/react";
+import { X, Check, Search } from "lucide-react";
 import DatePicker from "react-datepicker";
+import { v4 as uuidv4 } from "uuid";
+import { useAuth } from "react-oidc-context";
+import {
+    DynamoDBClient,
+    PutItemCommand,
+    ScanCommand,
+} from "@aws-sdk/client-dynamodb";
+import {
+    fromCognitoIdentityPool,
+} from "@aws-sdk/credential-provider-cognito-identity";
+import { unmarshall } from "@aws-sdk/util-dynamodb";
+
 import "react-datepicker/dist/react-datepicker.css";
+
+const REGION = "us-east-1";
+const IDENTITY_POOL_ID = "us-east-1:e6bcc9cf-e0f5-4d5a-a530-1766da1767f9";
+const CUSTOMERS_TABLE_NAME = "Customer_Information";
+const RETAIL_TABLE_NAME = "Transaction_Retail";
+const WHOLESALE_TABLE_NAME = "Transaction_Wholesale";
 
 const nonJudicialVariations = [
     "100-90", "50-46", "40-35", "30-26", "25-21", "20-16", "10-8", "5-3"
 ];
 
 function AddTransactionModal({ isOpen, onClose }) {
+    const auth = useAuth();
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [productType, setProductType] = useState("Retail");
     const [productCategory, setProductCategory] = useState("Non-judicial stamp");
+    const [productVariation, setProductVariation] = useState("");
+    const [quantity, setQuantity] = useState("");
+    const [sellingPrice, setSellingPrice] = useState("");
+    const [cogs, setCogs] = useState("");
+    const [netProfit, setNetProfit] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Customer search and selection
+    const [customers, setCustomers] = useState([]);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [selectedCustomer, setSelectedCustomer] = useState(null);
+    const [customerId, setCustomerId] = useState("");
+
+    // Load customers from DynamoDB
+    useEffect(() => {
+        if (auth.isAuthenticated && isOpen) {
+            fetchCustomers();
+        }
+    }, [auth.isAuthenticated, isOpen]);
+
+    // Calculate COGS and Net Profit when relevant values change
+    useEffect(() => {
+        if (productVariation) {
+            // Extract COGS from variation (e.g., "20-16" -> 16)
+            const cogsValue = productVariation.split('-')[1];
+            if (cogsValue && !isNaN(parseInt(cogsValue))) {
+                setCogs(cogsValue);
+            }
+        }
+    }, [productVariation]);
+
+    // Calculate net profit when quantity, sellingPrice, or cogs changes
+    useEffect(() => {
+        if (quantity && sellingPrice && cogs) {
+            const quantityNum = parseFloat(quantity);
+            const sellingPriceNum = parseFloat(sellingPrice);
+            const cogsNum = parseFloat(cogs);
+
+            if (!isNaN(quantityNum) && !isNaN(sellingPriceNum) && !isNaN(cogsNum)) {
+                const profit = (quantityNum * sellingPriceNum) - (cogsNum * quantityNum);
+                setNetProfit(profit.toFixed(2));
+            }
+        }
+    }, [quantity, sellingPrice, cogs]);
+
+    const fetchCustomers = async () => {
+        try {
+            const idToken = auth.user?.id_token || auth.user?.access_token;
+            const dynamoClient = createDynamoDBClient(idToken);
+
+            const command = new ScanCommand({ TableName: CUSTOMERS_TABLE_NAME });
+            const response = await dynamoClient.send(command);
+            const items = response.Items.map((item) => unmarshall(item));
+            setCustomers(items);
+        } catch (error) {
+            console.error("Error fetching customers:", error);
+        }
+    };
+
+    const createDynamoDBClient = (idToken) => {
+        const credentials = fromCognitoIdentityPool({
+            identityPoolId: IDENTITY_POOL_ID,
+            logins: {
+                "cognito-idp.us-east-1.amazonaws.com/us-east-1_szDQpWkvh": idToken,
+            },
+            clientConfig: { region: REGION },
+        });
+
+        return new DynamoDBClient({
+            region: REGION,
+            credentials,
+        });
+    };
 
     const handleProductTypeChange = (e) => {
         setProductType(e.target.value);
+        // Reset related fields when product type changes
+        setQuantity("");
+        setSellingPrice("");
+        setNetProfit("");
     };
 
     const handleProductCategoryChange = (e) => {
         setProductCategory(e.target.value);
+        setProductVariation("");
+        setCogs("");
+        setNetProfit("");
     };
 
-    const handleSubmit = (e) => {
+    const handleProductVariationChange = (e) => {
+        setProductVariation(e.target.value);
+    };
+
+    const handleCustomerSelect = (customer) => {
+        setSelectedCustomer(customer);
+        setCustomerId(customer.CustomerID);
+        setSearchTerm(customer.Name);
+        setShowDropdown(false);
+    };
+
+    const filterCustomers = () => {
+        if (!searchTerm.trim()) return customers;
+
+        return customers.filter(customer =>
+            customer.Name.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        // Just logging for now. You'll integrate DynamoDB later.
-        console.log("Transaction Submitted");
-        onClose();
+
+        if (!selectedCustomer) {
+            alert("Please select a customer");
+            return;
+        }
+
+        if (!productVariation) {
+            alert("Please select product variation");
+            return;
+        }
+
+        if (!quantity || !sellingPrice) {
+            alert("Please fill in all required fields");
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        try {
+            const idToken = auth.user?.id_token || auth.user?.access_token;
+            const dynamoClient = createDynamoDBClient(idToken);
+
+            // Generate unique transaction ID
+            const transactionId = uuidv4();
+
+            // Format date as YYYY-MM-DD
+            const formattedDate = selectedDate.toISOString().split('T')[0];
+
+            // Determine which table to use based on product type
+            const tableName = productType === "Retail"
+                ? RETAIL_TABLE_NAME
+                : WHOLESALE_TABLE_NAME;
+
+            // Common fields
+            const transactionData = {
+                TransactionID: { S: transactionId },
+                CustomerID: { S: customerId },
+                Date: { S: formattedDate },
+                ProductName: { S: productCategory },
+                ProductVariation: { S: productVariation },
+                NetProfit: { N: netProfit.toString() },
+            };
+
+            // Add type-specific fields
+            if (productType === "Retail") {
+                transactionData.COGS_Per_Pc = { N: cogs.toString() };
+                transactionData.Quantity_Pcs = { N: quantity.toString() };
+                transactionData.SellingPrice_Per_Pc = { N: sellingPrice.toString() };
+            } else {
+                transactionData.COGS_Per_Packet = { N: cogs.toString() };
+                transactionData.Quantity_Packets = { N: quantity.toString() };
+                transactionData.SellingPrice_Per_Packet = { N: sellingPrice.toString() };
+            }
+
+            await dynamoClient.send(
+                new PutItemCommand({
+                    TableName: tableName,
+                    Item: transactionData,
+                })
+            );
+
+            alert("Transaction added successfully!");
+            onClose();
+
+            // Reset form
+            setSearchTerm("");
+            setSelectedCustomer(null);
+            setCustomerId("");
+            setProductType("Retail");
+            setProductCategory("Non-judicial stamp");
+            setProductVariation("");
+            setQuantity("");
+            setSellingPrice("");
+            setCogs("");
+            setNetProfit("");
+
+        } catch (error) {
+            console.error("Error saving transaction:", error);
+            alert("Failed to save transaction. Please try again.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -41,7 +240,7 @@ function AddTransactionModal({ isOpen, onClose }) {
                     leaveFrom="opacity-100"
                     leaveTo="opacity-0"
                 >
-                    <div className="fixed inset-0 bg-black bg-opacity-30 transition-opacity" />
+                    <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm transition-opacity" />
                 </TransitionChild>
 
                 <div className="fixed inset-0 overflow-y-auto">
@@ -55,120 +254,249 @@ function AddTransactionModal({ isOpen, onClose }) {
                             leaveFrom="opacity-100 scale-100"
                             leaveTo="opacity-0 scale-95"
                         >
-                            <DialogPanel className="bg-white p-6 rounded-lg shadow-xl w-full max-w-xl">
-                                <DialogTitle className="text-xl font-semibold mb-4">
-                                    Add New Transaction
-                                </DialogTitle>
+                            <DialogPanel className="bg-white p-6 rounded-xl shadow-xl w-full max-w-xl">
+                                <div className="flex items-center justify-between mb-4">
+                                    <DialogTitle className="text-xl font-semibold text-gray-800">
+                                        Add New Transaction
+                                    </DialogTitle>
+                                    <button
+                                        onClick={onClose}
+                                        className="p-1 rounded-full hover:bg-gray-100"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
 
                                 <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-                                    {/* Customer Name Dropdown (searchable later) */}
-                                    <input
-                                        type="text"
-                                        name="customerName"
-                                        placeholder="Customer Name (Dropdown later)"
-                                        className="border p-2 rounded"
-                                    />
+                                    {/* Customer Name Searchable Dropdown */}
+                                    <div className="relative">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Customer Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Search size={16} className="text-gray-400" />
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={searchTerm}
+                                                onChange={(e) => {
+                                                    setSearchTerm(e.target.value);
+                                                    setShowDropdown(true);
+                                                    if (e.target.value === "") {
+                                                        setSelectedCustomer(null);
+                                                        setCustomerId("");
+                                                    }
+                                                }}
+                                                onFocus={() => setShowDropdown(true)}
+                                                placeholder="Search customers..."
+                                                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
 
-                                    {/* Customer ID (autofilled later) */}
-                                    <input
-                                        type="text"
-                                        name="customerId"
-                                        placeholder="Customer ID (Auto)"
-                                        disabled
-                                        className="border p-2 rounded bg-gray-100 text-gray-700"
-                                    />
+                                        {showDropdown && (
+                                            <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md max-h-60 overflow-auto">
+                                                {filterCustomers().length > 0 ? (
+                                                    filterCustomers().map((customer) => (
+                                                        <div
+                                                            key={customer.CustomerID}
+                                                            className="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+                                                            onClick={() => handleCustomerSelect(customer)}
+                                                        >
+                                                            {customer.Name}
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="px-4 py-2 text-gray-500">No customer found</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Customer ID (autofilled) */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Customer ID
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={customerId}
+                                            readOnly
+                                            disabled
+                                            className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-700"
+                                        />
+                                    </div>
 
                                     {/* Date Picker */}
-                                    <DatePicker
-                                        selected={selectedDate}
-                                        onChange={(date) => setSelectedDate(date)}
-                                        dateFormat="yyyy-MM-dd"
-                                        className="border p-2 rounded w-full"
-                                        placeholderText="Select date"
-                                    />
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Transaction Date <span className="text-red-500">*</span>
+                                        </label>
+                                        <DatePicker
+                                            selected={selectedDate}
+                                            onChange={(date) => setSelectedDate(date)}
+                                            dateFormat="yyyy-MM-dd"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholderText="Select date"
+                                        />
+                                    </div>
 
                                     {/* Product Type */}
-                                    <select
-                                        name="productType"
-                                        value={productType}
-                                        onChange={handleProductTypeChange}
-                                        className="border p-2 rounded"
-                                    >
-                                        <option value="Retail">Retail</option>
-                                        <option value="Wholesale">Wholesale</option>
-                                    </select>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Product Type <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={productType}
+                                            onChange={handleProductTypeChange}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        >
+                                            <option value="Retail">Retail</option>
+                                            <option value="Wholesale">Wholesale</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Product Category */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Product Category <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={productCategory}
+                                            onChange={handleProductCategoryChange}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        >
+                                            <option value="Non-judicial stamp">Non-judicial stamp</option>
+                                            <option value="Cartridge Paper">Cartridge Paper</option>
+                                            <option value="Folio paper">Folio paper</option>
+                                        </select>
+                                    </div>
 
                                     {/* Product Variation */}
-                                    <select
-                                        name="productCategory"
-                                        value={productCategory}
-                                        onChange={handleProductCategoryChange}
-                                        className="border p-2 rounded"
-                                    >
-                                        <option value="Non-judicial stamp">Non-judicial stamp</option>
-                                        <option value="Cartridge Paper">Cartridge Paper</option>
-                                        <option value="Folio paper">Folio paper</option>
-                                    </select>
-
-                                    {productCategory === "Non-judicial stamp" && (
-                                        <select name="productVariation" className="border p-2 rounded">
-                                            <option value="">Select Variation</option>
-                                            {nonJudicialVariations.map((v) => (
-                                                <option key={v} value={v}>
-                                                    {v}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    )}
-
-                                    {productCategory !== "Non-judicial stamp" && (
-                                        <input
-                                            name="productVariation"
-                                            placeholder="Variation (e.g. 10-6)"
-                                            className="border p-2 rounded"
-                                        />
-                                    )}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Product Variation <span className="text-red-500">*</span>
+                                        </label>
+                                        {productCategory === "Non-judicial stamp" ? (
+                                            <select
+                                                value={productVariation}
+                                                onChange={handleProductVariationChange}
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="">Select Variation</option>
+                                                {nonJudicialVariations.map((v) => (
+                                                    <option key={v} value={v}>
+                                                        {v}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                value={productVariation}
+                                                onChange={(e) => setProductVariation(e.target.value)}
+                                                placeholder="Variation (e.g. 10-6)"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        )}
+                                    </div>
 
                                     {/* Quantity */}
-                                    <input
-                                        type="number"
-                                        name={productType === "Retail" ? "Quantity_Pcs" : "Quantity_Packets"}
-                                        placeholder={productType === "Retail" ? "Quantity_Pcs" : "Quantity_Packets"}
-                                        className="border p-2 rounded"
-                                    />
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            {productType === "Retail" ? "Quantity (Pcs)" : "Quantity (Packets)"} <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={quantity}
+                                            min="1"
+                                            onChange={(e) => setQuantity(e.target.value)}
+                                            placeholder={productType === "Retail" ? "Number of pieces" : "Number of packets"}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                    </div>
 
                                     {/* Selling Price */}
-                                    <input
-                                        type="number"
-                                        name="sellingPrice"
-                                        placeholder="Selling Price"
-                                        className="border p-2 rounded"
-                                    />
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            {productType === "Retail" ? "Selling Price (per pc)" : "Selling Price (per packet)"} <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={sellingPrice}
+                                            min="0"
+                                            step="0.01"
+                                            onChange={(e) => setSellingPrice(e.target.value)}
+                                            placeholder={productType === "Retail" ? "Price per piece" : "Price per packet"}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                    </div>
 
-                                    {/* COGS (auto-filled later) */}
-                                    <input
-                                        type="number"
-                                        name={productType === "Retail" ? "COGS_Pcs" : "COGS_Packets"}
-                                        placeholder={productType === "Retail" ? "COGS_Pcs" : "COGS_Packets"}
-                                        disabled
-                                        className="border p-2 rounded bg-gray-100 text-gray-700"
-                                    />
+                                    {/* COGS (auto-filled) */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            {productType === "Retail" ? "COGS (per pc)" : "COGS (per packet)"}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={cogs}
+                                            readOnly
+                                            className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-700"
+                                        />
+                                    </div>
 
-                                    {/* Net Profit (auto-calculated later) */}
-                                    <input
-                                        type="number"
-                                        name="netProfit"
-                                        placeholder="Net Profit"
-                                        disabled
-                                        className="border p-2 rounded bg-gray-100 text-gray-700"
-                                    />
+                                    {/* Net Profit (auto-calculated) */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Net Profit
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={netProfit}
+                                            readOnly
+                                            className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-700"
+                                        />
+                                    </div>
 
-                                    <button
-                                        type="submit"
-                                        className="mt-4 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded"
-                                    >
-                                        Submit
-                                    </button>
+                                    {/* Submit Button */}
+                                    <div className="mt-2">
+                                        <button
+                                            type="submit"
+                                            disabled={isSubmitting}
+                                            className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-70"
+                                        >
+                                            {isSubmitting ? (
+                                                <span className="flex items-center">
+                                                    <svg
+                                                        className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <circle
+                                                            className="opacity-25"
+                                                            cx="12"
+                                                            cy="12"
+                                                            r="10"
+                                                            stroke="currentColor"
+                                                            strokeWidth="4"
+                                                        ></circle>
+                                                        <path
+                                                            className="opacity-75"
+                                                            fill="currentColor"
+                                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                        ></path>
+                                                    </svg>
+                                                    Processing...
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center">
+                                                    <Check size={18} className="mr-2" />
+                                                    Submit Transaction
+                                                </span>
+                                            )}
+                                        </button>
+                                    </div>
                                 </form>
                             </DialogPanel>
                         </TransitionChild>
