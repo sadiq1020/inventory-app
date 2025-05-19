@@ -2,7 +2,7 @@
 import React, { Fragment, useState, useEffect } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { Transition, TransitionChild } from "@headlessui/react";
-import { X, Check, Search } from "lucide-react";
+import { X, Check, Search, Clock } from "lucide-react";
 import DatePicker from "react-datepicker";
 import { v4 as uuidv4 } from "uuid";
 import { useAuth } from "react-oidc-context";
@@ -30,7 +30,7 @@ const nonJudicialVariations = [
 
 function AddTransactionModal({ isOpen, onClose }) {
     const auth = useAuth();
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedDateTime, setSelectedDateTime] = useState(new Date());
     const [productType, setProductType] = useState("Retail");
     const [productCategory, setProductCategory] = useState("Non-judicial stamp");
     const [productVariation, setProductVariation] = useState("");
@@ -170,7 +170,10 @@ function AddTransactionModal({ isOpen, onClose }) {
             const transactionId = uuidv4();
 
             // Format date as YYYY-MM-DD
-            const formattedDate = selectedDate.toISOString().split('T')[0];
+            const formattedDate = selectedDateTime.toISOString().split('T')[0];
+
+            // Format time as HH:MM:SS
+            const formattedTime = selectedDateTime.toTimeString().split(' ')[0];
 
             // Determine which table to use based on product type
             const tableName = productType === "Retail"
@@ -182,6 +185,7 @@ function AddTransactionModal({ isOpen, onClose }) {
                 TransactionID: { S: transactionId },
                 CustomerID: { S: customerId },
                 Date: { S: formattedDate },
+                Time: { S: formattedTime },
                 ProductName: { S: productCategory },
                 ProductVariation: { S: productVariation },
                 NetProfit: { N: netProfit.toString() },
@@ -327,18 +331,26 @@ function AddTransactionModal({ isOpen, onClose }) {
                                         />
                                     </div>
 
-                                    {/* Date Picker */}
+                                    {/* Date & Time Picker */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Transaction Date <span className="text-red-500">*</span>
+                                            Transaction Date & Time <span className="text-red-500">*</span>
                                         </label>
-                                        <DatePicker
-                                            selected={selectedDate}
-                                            onChange={(date) => setSelectedDate(date)}
-                                            dateFormat="yyyy-MM-dd"
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholderText="Select date"
-                                        />
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Clock size={16} className="text-gray-400" />
+                                            </div>
+                                            <DatePicker
+                                                selected={selectedDateTime}
+                                                onChange={(date) => setSelectedDateTime(date)}
+                                                dateFormat="yyyy-MM-dd h:mm aa"
+                                                showTimeSelect
+                                                timeFormat="HH:mm"
+                                                timeIntervals={15}
+                                                className="w-full pl-10 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                placeholderText="Select date and time"
+                                            />
+                                        </div>
                                     </div>
 
                                     {/* Product Type */}
