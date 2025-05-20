@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import Sidebar from "./Sidebar";
 import PageHeader from "./PageHeader";
 import TransactionTable from "./TransactionTable";
-import TransactionActions from "./TransactionActions";
+// import TransactionActions from "./TransactionActions";
 
 function HomePage() {
   const [transactionType, setTransactionType] = useState("all"); // "all", "retail", or "wholesale"
@@ -48,7 +48,7 @@ function HomePage() {
           </div>
 
           {/* Admin Actions */}
-          <TransactionActions />
+          {/* <TransactionActions /> */}
         </main>
       </div>
     </div>

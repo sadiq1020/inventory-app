@@ -2,16 +2,30 @@
 import React from "react";
 import { useAuth } from "react-oidc-context";
 import { ShoppingBag, Package, LogOut, User, List } from "lucide-react";
+// import CognitoService from "../auth/CognitoService";
 
 function PageHeader({ title, onAllClick, onRetailClick, onWholesaleClick }) {
     const auth = useAuth();
 
     const handleLogout = () => {
-        auth.signoutRedirect();
+        auth.removeUser(); // optional: clears local session
+
+        window.location.href = `https://us-east-1szdqpwkvh.auth.us-east-1.amazoncognito.com/logout?client_id=15blsvpjgpi9c2v4h38amrg3tb&logout_uri=http://localhost:5173`;
     };
 
     const handleLogin = () => {
-        auth.signinRedirect();
+        // Use signinRedirect with minimal parameters to use the defaults from config
+        auth.signinRedirect().catch(error => {
+            console.error("Login error:", error);
+        });
+    };
+
+    // Function to determine if button should appear active
+    const getButtonClass = (isActive) => {
+        return `px-4 py-2 text-sm font-medium rounded-md transition ${isActive
+            ? "bg-white text-blue-600 shadow-sm"
+            : "text-gray-700 hover:bg-white hover:shadow-sm"
+            }`;
     };
 
     return (
@@ -24,7 +38,7 @@ function PageHeader({ title, onAllClick, onRetailClick, onWholesaleClick }) {
                     <div className="hidden md:flex bg-gray-100 p-1 rounded-lg">
                         <button
                             onClick={onAllClick}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm transition"
+                            className={getButtonClass(title === "All Transactions")}
                         >
                             <List size={16} className="inline mr-1" />
                             All
@@ -32,7 +46,7 @@ function PageHeader({ title, onAllClick, onRetailClick, onWholesaleClick }) {
 
                         <button
                             onClick={onRetailClick}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm transition"
+                            className={getButtonClass(title === "Retail Transactions")}
                         >
                             <ShoppingBag size={16} className="inline mr-1" />
                             Retail
@@ -40,7 +54,7 @@ function PageHeader({ title, onAllClick, onRetailClick, onWholesaleClick }) {
 
                         <button
                             onClick={onWholesaleClick}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm transition"
+                            className={getButtonClass(title === "Wholesale Transactions")}
                         >
                             <Package size={16} className="inline mr-1" />
                             Wholesale

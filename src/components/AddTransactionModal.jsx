@@ -1,10 +1,9 @@
-// src/components/AddTransactionModal.jsx
+// src/components/ModifyTransactionModal.jsx
 import React, { Fragment, useState, useEffect } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { Transition, TransitionChild } from "@headlessui/react";
 import { X, Check, Search, Clock } from "lucide-react";
 import DatePicker from "react-datepicker";
-import { v4 as uuidv4 } from "uuid";
 import { useAuth } from "react-oidc-context";
 import {
     DynamoDBClient,
@@ -28,7 +27,7 @@ const nonJudicialVariations = [
     "100-90", "50-46", "40-35", "30-26", "25-21", "20-16", "10-8", "5-3"
 ];
 
-function AddTransactionModal({ isOpen, onClose }) {
+function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails }) {
     const auth = useAuth();
     const [selectedDateTime, setSelectedDateTime] = useState(new Date());
     const [productType, setProductType] = useState("Retail");
@@ -47,23 +46,56 @@ function AddTransactionModal({ isOpen, onClose }) {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [customerId, setCustomerId] = useState("");
 
+    // Initialize form with transaction data
+    useEffect(() => {
+        if (transaction && isOpen) {
+            // Set product type
+            setProductType(transaction.type === "retail" ? "Retail" : "Wholesale");
+
+            // Set product category and variation
+            setProductCategory(transaction.ProductName || "Non-judicial stamp");
+            setProductVariation(transaction.ProductVariation || "");
+
+            // Set quantity and pricing
+            setQuantity(transaction.quantity?.toString() || "");
+            setSellingPrice(transaction.sellingPrice?.toString() || "");
+            setCogs(transaction.cogs?.toString() || "");
+            setNetProfit(transaction.NetProfit?.toString() || "");
+
+            // Set customer
+            setCustomerId(transaction.CustomerID || "");
+
+            // Set date and time
+            if (transaction.Date) {
+                const date = new Date(transaction.Date);
+                if (transaction.Time) {
+                    const timeParts = transaction.Time.split(':');
+                    if (timeParts.length >= 2) {
+                        date.setHours(parseInt(timeParts[0], 10));
+                        date.setMinutes(parseInt(timeParts[1], 10));
+                        if (timeParts.length > 2) {
+                            date.setSeconds(parseInt(timeParts[2], 10));
+                        }
+                    }
+                }
+                setSelectedDateTime(date);
+            }
+
+            // Set customer information
+            if (transaction.CustomerID && customerDetails[transaction.CustomerID]) {
+                const customer = customerDetails[transaction.CustomerID];
+                setSelectedCustomer(customer);
+                setSearchTerm(customer.Name || "");
+            }
+        }
+    }, [transaction, isOpen, customerDetails]);
+
     // Load customers from DynamoDB
     useEffect(() => {
         if (auth.isAuthenticated && isOpen) {
             fetchCustomers();
         }
     }, [auth.isAuthenticated, isOpen]);
-
-    // Calculate COGS and Net Profit when relevant values change
-    useEffect(() => {
-        if (productVariation) {
-            // Extract COGS from variation (e.g., "20-16" -> 16)
-            const cogsValue = productVariation.split('-')[1];
-            if (cogsValue && !isNaN(parseInt(cogsValue))) {
-                setCogs(cogsValue);
-            }
-        }
-    }, [productVariation]);
 
     // Calculate net profit when quantity, sellingPrice, or cogs changes
     useEffect(() => {
@@ -125,6 +157,12 @@ function AddTransactionModal({ isOpen, onClose }) {
 
     const handleProductVariationChange = (e) => {
         setProductVariation(e.target.value);
+
+        // Extract COGS from variation (e.g., "20-16" -> 16)
+        const cogsValue = e.target.value.split('-')[1];
+        if (cogsValue && !isNaN(parseInt(cogsValue))) {
+            setCogs(cogsValue);
+        }
     };
 
     const handleCustomerSelect = (customer) => {
@@ -166,8 +204,8 @@ function AddTransactionModal({ isOpen, onClose }) {
             const idToken = auth.user?.id_token || auth.user?.access_token;
             const dynamoClient = createDynamoDBClient(idToken);
 
-            // Generate unique transaction ID
-            const transactionId = uuidv4();
+            // Use the existing transaction ID
+            const transactionId = transaction.TransactionID;
 
             // Format date as YYYY-MM-DD
             const formattedDate = selectedDateTime.toISOString().split('T')[0];
@@ -209,24 +247,12 @@ function AddTransactionModal({ isOpen, onClose }) {
                 })
             );
 
-            alert("Transaction added successfully!");
+            alert("Transaction updated successfully!");
             onClose();
 
-            // Reset form
-            setSearchTerm("");
-            setSelectedCustomer(null);
-            setCustomerId("");
-            setProductType("Retail");
-            setProductCategory("Non-judicial stamp");
-            setProductVariation("");
-            setQuantity("");
-            setSellingPrice("");
-            setCogs("");
-            setNetProfit("");
-
         } catch (error) {
-            console.error("Error saving transaction:", error);
-            alert("Failed to save transaction. Please try again.");
+            console.error("Error updating transaction:", error);
+            alert("Failed to update transaction. Please try again.");
         } finally {
             setIsSubmitting(false);
         }
@@ -261,7 +287,7 @@ function AddTransactionModal({ isOpen, onClose }) {
                             <DialogPanel className="bg-white p-6 rounded-xl shadow-xl w-full max-w-xl">
                                 <div className="flex items-center justify-between mb-4">
                                     <DialogTitle className="text-xl font-semibold text-gray-800">
-                                        Add New Transaction
+                                        Modify Transaction
                                     </DialogTitle>
                                     <button
                                         onClick={onClose}
@@ -475,7 +501,7 @@ function AddTransactionModal({ isOpen, onClose }) {
                                         <button
                                             type="submit"
                                             disabled={isSubmitting}
-                                            className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-70"
+                                            className="w-full flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-70"
                                         >
                                             {isSubmitting ? (
                                                 <span className="flex items-center">
@@ -504,7 +530,7 @@ function AddTransactionModal({ isOpen, onClose }) {
                                             ) : (
                                                 <span className="flex items-center">
                                                     <Check size={18} className="mr-2" />
-                                                    Submit Transaction
+                                                    Update Transaction
                                                 </span>
                                             )}
                                         </button>
@@ -519,4 +545,4 @@ function AddTransactionModal({ isOpen, onClose }) {
     );
 }
 
-export default AddTransactionModal;
+export default ModifyTransactionModal;

@@ -9,11 +9,6 @@ export const oidcConfig = {
     // Add explicit post-logout redirect URL
     post_logout_redirect_uri: "http://localhost:5173",
 
-    // Set additional endpoints for Cognito
-    extraQueryParams: {
-        // Add any additional query parameters needed for Cognito
-    },
-
     // Metadata for endpoints
     metadataUrl: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_szDQpWkvh/.well-known/openid-configuration",
 
