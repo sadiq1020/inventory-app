@@ -47,6 +47,8 @@ function HomePage() {
             <TransactionTable initialTransactionType={transactionType} />
           </div>
 
+
+
           {/* Admin Actions */}
           {/* <TransactionActions /> */}
         </main>

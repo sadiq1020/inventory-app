@@ -1,4 +1,3 @@
-// src/App.jsx
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import HomePage from "./components/HomePage";
@@ -12,6 +11,7 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
 
+
   useEffect(() => {
     if (!auth.isLoading && !auth.isAuthenticated) {
       auth.signinRedirect({ state: { from: location.pathname } });
@@ -24,7 +24,10 @@ function ProtectedRoute({ children }) {
   return auth.isAuthenticated ? children : null;
 }
 
+// ✅ Move App function OUTSIDE
 function App() {
+
+
   return (
     <Router>
       <Routes>

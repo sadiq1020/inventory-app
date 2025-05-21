@@ -13,7 +13,7 @@ export const oidcConfig = {
     metadataUrl: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_szDQpWkvh/.well-known/openid-configuration",
 
     // Automatic silent renew configuration
-    automaticSilentRenew: true,
+    automaticSilentRenew: false,
 
     // Load user info
     loadUserInfo: true

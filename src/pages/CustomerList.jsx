@@ -17,6 +17,14 @@ function CustomerList() {
     const [activeFilter, setActiveFilter] = useState("all");
     const [editingCustomer, setEditingCustomer] = useState(null);
 
+    if (auth.isLoading) return <div className="p-4 text-gray-500">Loading authentication...</div>;
+
+    if (!auth.isAuthenticated) {
+        // Redirect unauthenticated users
+        window.location.href = "http://localhost:5173";
+        return null;
+    }
+
     const openModal = () => setIsModalOpen(true);
     const closeModal = () => {
         setIsModalOpen(false);
@@ -67,8 +75,12 @@ function CustomerList() {
     };
 
     useEffect(() => {
-        if (auth.user) fetchCustomers();
-    }, [auth.user]);
+        if (!auth.isAuthenticated) {
+            window.location.href = "http://localhost:5173";
+        } else {
+            fetchCustomers();
+        }
+    }, [auth.isAuthenticated]);
 
     const filteredCustomers = customers.filter((c) => {
         const matchesType =
@@ -106,8 +118,8 @@ function CustomerList() {
                                     <button
                                         onClick={handleResetFilter}
                                         className={`px-3 py-1.5 text-sm rounded-md ${activeFilter === "all"
-                                                ? "bg-white text-blue-600 shadow-sm"
-                                                : "text-gray-600 hover:bg-gray-200"
+                                            ? "bg-white text-blue-600 shadow-sm"
+                                            : "text-gray-600 hover:bg-gray-200"
                                             }`}
                                     >
                                         All
@@ -115,8 +127,8 @@ function CustomerList() {
                                     <button
                                         onClick={handleRetailClick}
                                         className={`flex items-center px-3 py-1.5 text-sm rounded-md ${activeFilter === "retail"
-                                                ? "bg-white text-blue-600 shadow-sm"
-                                                : "text-gray-600 hover:bg-gray-200"
+                                            ? "bg-white text-blue-600 shadow-sm"
+                                            : "text-gray-600 hover:bg-gray-200"
                                             }`}
                                     >
                                         <Filter size={14} className="mr-1" />
@@ -125,8 +137,8 @@ function CustomerList() {
                                     <button
                                         onClick={handleWholesaleClick}
                                         className={`flex items-center px-3 py-1.5 text-sm rounded-md ${activeFilter === "wholesale"
-                                                ? "bg-white text-blue-600 shadow-sm"
-                                                : "text-gray-600 hover:bg-gray-200"
+                                            ? "bg-white text-blue-600 shadow-sm"
+                                            : "text-gray-600 hover:bg-gray-200"
                                             }`}
                                     >
                                         <Filter size={14} className="mr-1" />

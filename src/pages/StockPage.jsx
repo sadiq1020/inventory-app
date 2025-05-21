@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import AddStockModal from "../components/AddStockModal";
+import PageHeader from "../components/PageHeader";
 import DeleteConfirmModal from "../utils/DeleteConfirmModal";
 import { fetchStock, deleteStockItem } from "../utils/stockService";
 import { useAuth } from "react-oidc-context";
@@ -27,10 +28,23 @@ function StockPage() {
   const [itemToEdit, setItemToEdit] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null);
 
+  if (auth.isLoading) return <div className="p-4 text-gray-500">Loading authentication...</div>;
+
+  if (!auth.isAuthenticated) {
+    // Redirect unauthenticated users
+    window.location.href = "http://localhost:5173";
+    return null;
+  }
+
   // Fetch stock data on component mount and when active tab changes
   useEffect(() => {
-    fetchData();
-  }, [auth.user, activeTab]);
+    if (!auth.isAuthenticated) {
+      window.location.href = "http://localhost:5173";
+    } else {
+      fetchData();
+    }
+  }, [auth.isAuthenticated, activeTab]);
+
 
   const fetchData = async () => {
     try {
@@ -188,7 +202,7 @@ function StockPage() {
       <Sidebar />
 
       <div className="flex-1 overflow-auto">
-        <header className="sticky top-0 z-10 bg-white border-b px-6 py-4 shadow-sm">
+        {/* <header className="sticky top-0 z-10 bg-white border-b px-6 py-4 shadow-sm">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-800">Stock Management</h1>
             <button className="flex items-center px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
@@ -196,25 +210,38 @@ function StockPage() {
               <span>Log out</span>
             </button>
           </div>
-        </header>
-
+        </header> */}
+        <PageHeader />
         <main className="p-6 max-w-7xl mx-auto">
           {/* Tabs & Actions */}
           <div className="mb-6 bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center space-x-1">
-                <button onClick={() => setActiveTab("retail")}
-                  className={`px-4 py-2 rounded-md ${activeTab === "retail" ? "bg-blue-100 text-blue-700 font-medium" : "text-gray-600 hover:bg-gray-100"}`}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-2">
+
+              {/* Retail & Wholesale Filters */}
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setActiveTab("retail")}
+                  className={`flex-1 px-4 py-2 rounded-md ${activeTab === "retail"
+                    ? "bg-blue-100 text-blue-700 font-medium"
+                    : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                >
                   Retail Stock
                 </button>
-                <button onClick={() => setActiveTab("wholesale")}
-                  className={`px-4 py-2 rounded-md ${activeTab === "wholesale" ? "bg-green-100 text-green-700 font-medium" : "text-gray-600 hover:bg-gray-100"}`}>
+                <button
+                  onClick={() => setActiveTab("wholesale")}
+                  className={`flex-1 px-4 py-2 rounded-md ${activeTab === "wholesale"
+                    ? "bg-green-100 text-green-700 font-medium"
+                    : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                >
                   Wholesale Stock
                 </button>
               </div>
 
-              <div className="flex items-center space-x-2">
-                <div className="relative">
+              {/* Search and Low Stock */}
+              <div className="flex flex-col sm:flex-row sm:space-x-2 gap-2">
+                <div className="relative flex-1">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                     <Search size={16} className="text-gray-400" />
                   </div>
@@ -223,39 +250,59 @@ function StockPage() {
                     placeholder="Search items..."
                     value={searchQuery}
                     onChange={handleSearch}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
-                <button onClick={() => setShowLowStock(!showLowStock)}
-                  className={`flex items-center px-3 py-2 rounded-md border ${showLowStock ? "bg-amber-50 border-amber-200 text-amber-700" : "border-gray-300 hover:bg-gray-50"}`}>
+                <button
+                  onClick={() => setShowLowStock(!showLowStock)}
+                  className={`flex items-center justify-center px-3 py-2 rounded-md border flex-shrink-0 ${showLowStock
+                    ? "bg-amber-50 border-amber-200 text-amber-700"
+                    : "border-gray-300 hover:bg-gray-50"
+                    }`}
+                >
                   <AlertCircle size={16} className="mr-1" />
                   Low Stock
                 </button>
+              </div>
 
-                <button onClick={handleExportData}
-                  className="flex items-center px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50">
+              {/* Export and Refresh */}
+              <div className="flex flex-col min-[400px]:flex-row gap-2">
+
+                <button
+                  onClick={handleExportData}
+                  className="flex-1 flex items-center justify-center px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50"
+                >
                   <Download size={16} className="mr-1" />
                   Export
                 </button>
 
-                <button onClick={fetchData}
-                  className="flex items-center px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50">
+                <button
+                  onClick={fetchData}
+                  className="flex-1 flex items-center justify-center px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50"
+                >
                   <RefreshCw size={16} className="mr-1" />
                   Refresh
                 </button>
+              </div>
 
-                <button onClick={() => {
-                  setItemToEdit(null);
-                  setIsAddModalOpen(true);
-                }}
-                  className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+              {/* Add Item Button */}
+              <div>
+                <button
+                  onClick={() => {
+                    setItemToEdit(null);
+                    setIsAddModalOpen(true);
+                  }}
+                  className="w-full flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
                   <Plus size={16} className="mr-1" />
                   Add Item
                 </button>
               </div>
+
             </div>
           </div>
+
 
           {/* Error message */}
           {error && (
@@ -400,6 +447,20 @@ function StockPage() {
               </div>
             </div>
           )}
+          {/* Mobile-only Add Item Button at Bottom */}
+          <div className="md:hidden mt-6 px-4">
+            <button
+              onClick={() => {
+                setItemToEdit(null);
+                setIsAddModalOpen(true);
+              }}
+              className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              <Plus size={16} className="mr-1" />
+              Add Item
+            </button>
+          </div>
+
         </main>
       </div>
 

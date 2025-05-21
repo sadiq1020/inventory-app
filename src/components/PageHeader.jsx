@@ -8,16 +8,33 @@ function PageHeader({ title, onAllClick, onRetailClick, onWholesaleClick }) {
     const auth = useAuth();
 
     const handleLogout = () => {
-        auth.removeUser(); // optional: clears local session
+        // Clear local auth state manually (optional)
+        auth.removeUser();
+        // auth.signoutRedirect();
+        localStorage.clear();
 
-        window.location.href = `https://us-east-1szdqpwkvh.auth.us-east-1.amazoncognito.com/logout?client_id=15blsvpjgpi9c2v4h38amrg3tb&logout_uri=http://localhost:5173`;
+        // Then force full logout via Hosted UI
+        window.location.href = "https://us-east-1szdqpwkvh.auth.us-east-1.amazoncognito.com/logout?client_id=15blsvpjgpi9c2v4h38amrg3tb&logout_uri=http://localhost:5173/&federated";
     };
 
-    const handleLogin = () => {
-        // Use signinRedirect with minimal parameters to use the defaults from config
-        auth.signinRedirect().catch(error => {
+
+
+    // const handleLogin = () => {
+    //     // Use signinRedirect with minimal parameters to use the defaults from config
+    //     auth.signinRedirect().catch(error => {
+    //         console.error("Login error:", error);
+    //     });
+    // };
+
+    const handleLogin = async () => {
+        if (auth.isLoading) return; // Prevent triggering while already loading
+
+        try {
+            await auth.signinRedirect();
+        } catch (error) {
             console.error("Login error:", error);
-        });
+            // Optional: Show an error toast/alert here if you want
+        }
     };
 
     // Function to determine if button should appear active
