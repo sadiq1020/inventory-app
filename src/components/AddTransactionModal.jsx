@@ -1,8 +1,8 @@
-// src/components/ModifyTransactionModal.jsx
+// src/components/AddTransactionModal.jsx
 import React, { Fragment, useState, useEffect } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { Transition, TransitionChild } from "@headlessui/react";
-import { X, Check, Search, Clock } from "lucide-react";
+import { X, Check, Search, Clock, Plus } from "lucide-react";
 import DatePicker from "react-datepicker";
 import { useAuth } from "react-oidc-context";
 import {
@@ -22,12 +22,10 @@ const IDENTITY_POOL_ID = "us-east-1:e6bcc9cf-e0f5-4d5a-a530-1766da1767f9";
 const CUSTOMERS_TABLE_NAME = "Customer_Information";
 const RETAIL_TABLE_NAME = "Transaction_Retail";
 const WHOLESALE_TABLE_NAME = "Transaction_Wholesale";
+const RETAIL_STOCK_TABLE = "Retail_Stock";
+const WHOLESALE_STOCK_TABLE = "Wholesale_Stock";
 
-const nonJudicialVariations = [
-    "100-90", "50-46", "40-35", "30-26", "25-21", "20-16", "10-8", "5-3"
-];
-
-function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails }) {
+function AddTransactionModal({ isOpen, onClose, transaction, customerDetails, isEdit = false }) {
     const auth = useAuth();
     const [selectedDateTime, setSelectedDateTime] = useState(new Date());
     const [productType, setProductType] = useState("Retail");
@@ -46,9 +44,15 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [customerId, setCustomerId] = useState("");
 
-    // Initialize form with transaction data
+    // Product variations from stock tables
+    const [availableVariations, setAvailableVariations] = useState([]);
+
+    // Determine if this is edit mode
+    const isEditMode = isEdit && transaction;
+
+    // Initialize form with transaction data for edit mode
     useEffect(() => {
-        if (transaction && isOpen) {
+        if (isEditMode && isOpen) {
             // Set product type
             setProductType(transaction.type === "retail" ? "Retail" : "Wholesale");
 
@@ -62,7 +66,7 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
             setCogs(transaction.cogs?.toString() || "");
             setNetProfit(transaction.NetProfit?.toString() || "");
 
-            // Set customer
+            // Set customer ID
             setCustomerId(transaction.CustomerID || "");
 
             // Set date and time
@@ -82,13 +86,32 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
             }
 
             // Set customer information
-            if (transaction.CustomerID && customerDetails[transaction.CustomerID]) {
+            if (transaction.CustomerID && customerDetails && customerDetails[transaction.CustomerID]) {
                 const customer = customerDetails[transaction.CustomerID];
                 setSelectedCustomer(customer);
                 setSearchTerm(customer.Name || "");
             }
+        } else if (!isEditMode && isOpen) {
+            // Reset form for add mode
+            resetForm();
         }
-    }, [transaction, isOpen, customerDetails]);
+    }, [transaction, isOpen, customerDetails, isEditMode]);
+
+    // Reset form function
+    const resetForm = () => {
+        setSelectedDateTime(new Date());
+        setProductType("Retail");
+        setProductCategory("Non-judicial stamp");
+        setProductVariation("");
+        setQuantity("");
+        setSellingPrice("");
+        setCogs("");
+        setNetProfit("");
+        setSearchTerm("");
+        setSelectedCustomer(null);
+        setCustomerId("");
+        setAvailableVariations([]);
+    };
 
     // Load customers from DynamoDB
     useEffect(() => {
@@ -96,6 +119,13 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
             fetchCustomers();
         }
     }, [auth.isAuthenticated, isOpen]);
+
+    // Fetch product variations when product type or category changes
+    useEffect(() => {
+        if (auth.isAuthenticated && isOpen && productCategory) {
+            fetchProductVariations();
+        }
+    }, [auth.isAuthenticated, isOpen, productType, productCategory]);
 
     // Calculate net profit when quantity, sellingPrice, or cogs changes
     useEffect(() => {
@@ -105,11 +135,18 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
             const cogsNum = parseFloat(cogs);
 
             if (!isNaN(quantityNum) && !isNaN(sellingPriceNum) && !isNaN(cogsNum)) {
-                const profit = (quantityNum * sellingPriceNum) - (cogsNum * quantityNum);
+                let profit;
+                if (productType === "Retail") {
+                    // Retail: Net Profit = (Quantity_pcs * Selling price) - (COGS_pcs * Quantity_pcs)
+                    profit = (quantityNum * sellingPriceNum) - (cogsNum * quantityNum);
+                } else {
+                    // Wholesale: Net Profit = (Quantity_packets * Selling price per packet) - (COGS_packets * 20 * Quantity_packets)
+                    profit = (quantityNum * sellingPriceNum) - (cogsNum * 20 * quantityNum);
+                }
                 setNetProfit(profit.toFixed(2));
             }
         }
-    }, [quantity, sellingPrice, cogs]);
+    }, [quantity, sellingPrice, cogs, productType]);
 
     const fetchCustomers = async () => {
         try {
@@ -122,6 +159,36 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
             setCustomers(items);
         } catch (error) {
             console.error("Error fetching customers:", error);
+        }
+    };
+
+    const fetchProductVariations = async () => {
+        try {
+            const idToken = auth.user?.id_token || auth.user?.access_token;
+            const dynamoClient = createDynamoDBClient(idToken);
+
+            // Determine which stock table to query
+            const stockTableName = productType === "Retail" ? RETAIL_STOCK_TABLE : WHOLESALE_STOCK_TABLE;
+
+            const command = new ScanCommand({ TableName: stockTableName });
+            const response = await dynamoClient.send(command);
+            const items = response.Items.map((item) => unmarshall(item));
+
+            // Filter variations based on product category
+            const categoryMap = {
+                "Non-judicial stamp": "Non-judicial stamp",
+                "Cartridge Paper": "Cartridge Paper",
+                "Folio paper": "Folio Paper"
+            };
+
+            const filteredVariations = items.filter(item =>
+                item.ItemType === categoryMap[productCategory]
+            );
+
+            setAvailableVariations(filteredVariations);
+        } catch (error) {
+            console.error("Error fetching product variations:", error);
+            setAvailableVariations([]);
         }
     };
 
@@ -140,12 +207,21 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
         });
     };
 
+    const generateTransactionId = () => {
+        const timestamp = Date.now().toString();
+        const random = Math.random().toString(36).substr(2, 9);
+        return `${productType.toLowerCase()}-${timestamp}-${random}`;
+    };
+
     const handleProductTypeChange = (e) => {
         setProductType(e.target.value);
         // Reset related fields when product type changes
+        setProductVariation("");
         setQuantity("");
         setSellingPrice("");
+        setCogs("");
         setNetProfit("");
+        setAvailableVariations([]);
     };
 
     const handleProductCategoryChange = (e) => {
@@ -156,12 +232,33 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
     };
 
     const handleProductVariationChange = (e) => {
-        setProductVariation(e.target.value);
+        const selectedVariation = e.target.value;
+        setProductVariation(selectedVariation);
 
-        // Extract COGS from variation (e.g., "20-16" -> 16)
-        const cogsValue = e.target.value.split('-')[1];
-        if (cogsValue && !isNaN(parseInt(cogsValue))) {
-            setCogs(cogsValue);
+        // Find the selected variation from available variations to get COGS
+        const variationItem = availableVariations.find(item =>
+            item.VariationName === selectedVariation
+        );
+
+        if (variationItem) {
+            // For variations like "20-16", extract the last part (16)
+            // For variations like "Folio_6", extract the number part (6)
+            let cogsValue = '';
+            if (selectedVariation.includes('-')) {
+                cogsValue = selectedVariation.split('-').pop();
+            } else if (selectedVariation.includes('_')) {
+                cogsValue = selectedVariation.split('_').pop();
+            } else {
+                // Look for any number in the variation name
+                const numberMatch = selectedVariation.match(/\d+$/);
+                if (numberMatch) {
+                    cogsValue = numberMatch[0];
+                }
+            }
+
+            if (cogsValue && !isNaN(parseInt(cogsValue))) {
+                setCogs(cogsValue);
+            }
         }
     };
 
@@ -204,8 +301,8 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
             const idToken = auth.user?.id_token || auth.user?.access_token;
             const dynamoClient = createDynamoDBClient(idToken);
 
-            // Use the existing transaction ID
-            const transactionId = transaction.TransactionID;
+            // Use existing transaction ID for edit mode, generate new for add mode
+            const transactionId = isEditMode ? transaction.TransactionID : generateTransactionId();
 
             // Format date as YYYY-MM-DD
             const formattedDate = selectedDateTime.toISOString().split('T')[0];
@@ -247,12 +344,12 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
                 })
             );
 
-            alert("Transaction updated successfully!");
+            alert(`Transaction ${isEditMode ? 'updated' : 'added'} successfully!`);
             onClose();
 
         } catch (error) {
-            console.error("Error updating transaction:", error);
-            alert("Failed to update transaction. Please try again.");
+            console.error(`Error ${isEditMode ? 'updating' : 'adding'} transaction:`, error);
+            alert(`Failed to ${isEditMode ? 'update' : 'add'} transaction. Please try again.`);
         } finally {
             setIsSubmitting(false);
         }
@@ -287,7 +384,7 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
                             <DialogPanel className="bg-white p-6 rounded-xl shadow-xl w-full max-w-xl">
                                 <div className="flex items-center justify-between mb-4">
                                     <DialogTitle className="text-xl font-semibold text-gray-800">
-                                        Modify Transaction
+                                        {isEditMode ? "Edit Transaction" : "New Transaction"}
                                     </DialogTitle>
                                     <button
                                         onClick={onClose}
@@ -415,28 +512,18 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Product Variation <span className="text-red-500">*</span>
                                         </label>
-                                        {productCategory === "Non-judicial stamp" ? (
-                                            <select
-                                                value={productVariation}
-                                                onChange={handleProductVariationChange}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            >
-                                                <option value="">Select Variation</option>
-                                                {nonJudicialVariations.map((v) => (
-                                                    <option key={v} value={v}>
-                                                        {v}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <input
-                                                type="text"
-                                                value={productVariation}
-                                                onChange={(e) => setProductVariation(e.target.value)}
-                                                placeholder="Variation (e.g. 10-6)"
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            />
-                                        )}
+                                        <select
+                                            value={productVariation}
+                                            onChange={handleProductVariationChange}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        >
+                                            <option value="">Select Variation</option>
+                                            {availableVariations.map((variation) => (
+                                                <option key={variation.VariationName} value={variation.VariationName}>
+                                                    {variation.VariationName}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
 
                                     {/* Quantity */}
@@ -501,7 +588,10 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
                                         <button
                                             type="submit"
                                             disabled={isSubmitting}
-                                            className="w-full flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-70"
+                                            className={`w-full flex items-center justify-center px-4 py-2 text-white rounded-lg transition focus:outline-none focus:ring-2 disabled:opacity-70 ${isEditMode
+                                                ? "bg-yellow-500 hover:bg-yellow-600 focus:ring-yellow-500"
+                                                : "bg-green-500 hover:bg-green-600 focus:ring-green-500"
+                                                }`}
                                         >
                                             {isSubmitting ? (
                                                 <span className="flex items-center">
@@ -529,8 +619,17 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
                                                 </span>
                                             ) : (
                                                 <span className="flex items-center">
-                                                    <Check size={18} className="mr-2" />
-                                                    Update Transaction
+                                                    {isEditMode ? (
+                                                        <>
+                                                            <Check size={18} className="mr-2" />
+                                                            Update Transaction
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Plus size={18} className="mr-2" />
+                                                            Submit Transaction
+                                                        </>
+                                                    )}
                                                 </span>
                                             )}
                                         </button>
@@ -545,4 +644,4 @@ function ModifyTransactionModal({ isOpen, onClose, transaction, customerDetails 
     );
 }
 
-export default ModifyTransactionModal;
+export default AddTransactionModal;

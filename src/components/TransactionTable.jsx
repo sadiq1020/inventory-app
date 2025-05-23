@@ -163,12 +163,30 @@ function TransactionTable({ initialTransactionType }) {
 
   // Handle edit transaction click
   const handleModifyTransactionClick = (transaction) => {
-    // Make sure to include customer details in the selected transaction
-    const enrichedTransaction = {
+    // Prepare the transaction data for the modal
+    const transactionForEdit = {
       ...transaction,
-      customerDetails: customerDetails[transaction.CustomerID] || {}
+      // Ensure the transaction has all necessary fields for editing
+      TransactionID: transaction.TransactionID,
+      CustomerID: transaction.CustomerID,
+      Date: transaction.Date,
+      Time: transaction.Time,
+      ProductName: transaction.ProductName,
+      ProductVariation: transaction.ProductVariation,
+      NetProfit: transaction.NetProfit,
+      // Add type-specific fields
+      ...(transaction.type === "retail" ? {
+        quantity: transaction.Quantity_Pcs,
+        sellingPrice: transaction.SellingPrice_Per_Pc,
+        cogs: transaction.COGS_Per_Pc,
+      } : {
+        quantity: transaction.Quantity_Packets,
+        sellingPrice: transaction.SellingPrice_Per_Packet,
+        cogs: transaction.COGS_Per_Packet,
+      })
     };
-    setSelectedTransaction(enrichedTransaction);
+
+    setSelectedTransaction(transactionForEdit);
     setIsModifyModalOpen(true);
   };
 
@@ -573,15 +591,13 @@ function TransactionTable({ initialTransactionType }) {
       />
 
       {/* Edit Transaction Modal */}
-      {isModifyModalOpen && selectedTransaction && (
-        <AddTransactionModal
-          isOpen={isModifyModalOpen}
-          onClose={handleModifyModalClose}
-          transaction={selectedTransaction}
-          isEdit={true}
-          customerDetails={customerDetails}
-        />
-      )}
+      <AddTransactionModal
+        isOpen={isModifyModalOpen}
+        onClose={handleModifyModalClose}
+        transaction={selectedTransaction}
+        customerDetails={customerDetails}
+        isEdit={true}
+      />
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
