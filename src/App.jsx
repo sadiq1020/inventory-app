@@ -4,6 +4,7 @@ import HomePage from "./components/HomePage";
 import CustomerList from "./pages/CustomerList";
 import StockPage from "./pages/StockPage";
 import { useAuth } from "react-oidc-context";
+import Reports from './pages/Reports';
 
 // 🔒 Custom ProtectedRoute wrapper
 function ProtectedRoute({ children }) {
@@ -48,6 +49,14 @@ function App() {
           element={
             <ProtectedRoute>
               <StockPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute>
+              <Reports />
             </ProtectedRoute>
           }
         />
