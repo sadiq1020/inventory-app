@@ -1,20 +1,11 @@
-// src/auth/oidcConfig.js
 export const oidcConfig = {
-    authority: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_szDQpWkvh",
-    client_id: "15blsvpjgpi9c2v4h38amrg3tb",
-    redirect_uri: "http://localhost:5173",
+    authority: `https://cognito-idp.${import.meta.env.VITE_COGNITO_REGION}.amazonaws.com/${import.meta.env.VITE_COGNITO_USER_POOL_ID}`,
+    client_id: import.meta.env.VITE_COGNITO_CLIENT_ID,
+    redirect_uri: import.meta.env.VITE_REDIRECT_URI,
     response_type: "code",
     scope: "openid email phone",
-
-    // Add explicit post-logout redirect URL
-    post_logout_redirect_uri: "http://localhost:5173",
-
-    // Metadata for endpoints
-    metadataUrl: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_szDQpWkvh/.well-known/openid-configuration",
-
-    // Automatic silent renew configuration
+    post_logout_redirect_uri: import.meta.env.VITE_LOGOUT_URI,
+    metadataUrl: `https://cognito-idp.${import.meta.env.VITE_COGNITO_REGION}.amazonaws.com/${import.meta.env.VITE_COGNITO_USER_POOL_ID}/.well-known/openid-configuration`,
     automaticSilentRenew: false,
-
-    // Load user info
     loadUserInfo: true
 };
