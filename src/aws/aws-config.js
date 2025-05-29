@@ -1,7 +1,7 @@
 import { CognitoIdentityClient } from "@aws-sdk/client-cognito-identity";
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-provider-cognito-identity";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { useAuth } from "react-oidc-context";
+// import { useAuth } from "react-oidc-context";
 
 const REGION = import.meta.env.VITE_COGNITO_REGION;
 const IDENTITY_POOL_ID = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID;
